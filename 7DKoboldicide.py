@@ -168,9 +168,12 @@ class Tile:
         	self.color = libtcod.darker_green
         elif self.terrain == CHAR_LONG_GRASS:
             self.color = libtcod.dark_green
-
         elif self.terrain == CHAR_GRASS:
         	self.color = libtcod.green
+        elif self.terrain in ['-','_','|']:
+        	self.color = libtcod.dark_sepia
+        elif self.terrain in ['X']:
+        	self.color = libtcod.light_flame
 
     def _toString(self):
         return '{},{}'.format(self.terrain, self.color)
@@ -2232,6 +2235,8 @@ def new_game():
     objects.append(dogCorpse)
 
     notifications.append(Notif('nham, tasty dog!',5,player.x+1,player.y+4))
+
+    message('As you return from you errands, you find your house burning and a kobold eating your dog')
  
 def next_level(dungeon = False,terrain=CHAR_MOUNTAIN):
     #advance to the next level
