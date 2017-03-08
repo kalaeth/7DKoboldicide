@@ -714,6 +714,7 @@ class Item:
         self.use_function = use_function
  
     def pick_up(self):
+    	global inventory
         #add to the player's inventory and remove from the map
         inventory.append(self.owner)
         objects.remove(self.owner)
@@ -729,8 +730,6 @@ class Item:
             self.owner.equipment.dequip()
  
         #add to the map and remove from the player's inventory. also, place it at the player's coordinates
-        objects.append(self.owner)
-        inventory.remove(self.owner)
         objects.append(self.owner)
         inventory.remove(self.owner)
         if x == -1:
@@ -2055,7 +2054,7 @@ def msgbox(text, width=50):
     menu(text, [], width)  #use menu() as a sort of "message box"
  
 def handle_keys():
-    global key,isRealTime, mouse, oldxx,oldyy,oldPxx,oldPyy,notifications
+    global key,isRealTime, mouse, oldxx,oldyy,oldPxx,oldPyy,notifications, inventory
  
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         #Alt+Enter: toggle fullscreen
@@ -2167,6 +2166,8 @@ def handle_keys():
 	                            	fit = f
 	                            	endx = _x
 	                            	endy = _y
+	                            	if curr_weap.owner.name.split(' ')[1] in ['spear']:
+	                            		endy += 1
 	                                _break = True
 	                                break
 	                        if _boomerang_:
@@ -2186,6 +2187,8 @@ def handle_keys():
 	                            	fit = f
 	                            	endx = _x
 	                            	endy = _y
+	                                if curr_weap.owner.name.split(' ')[1] in ['spear']:
+	                                	endx += 1
 	                                _break = True
 	                                break
 	                        if _boomerang_:
@@ -2204,6 +2207,8 @@ def handle_keys():
 	                            	fit = f
 	                            	endx = _x
 	                            	endy = _y
+	                            	if curr_weap.owner.name.split(' ')[1] in ['spear']:
+	                            		endy -= 1
 	                                _break = True
 	                                break
 	                        if _boomerang_:
@@ -2222,6 +2227,8 @@ def handle_keys():
 	                            if f.x == _x and f.y == _y:
 	                            	fit = f
 	                            	endx = _x
+	                            	if curr_weap.owner.name.split(' ')[1] in ['spear']:
+	                            		endx -= 1
 	                            	endy = _y
 	                                _break = True
 	                                break
@@ -2247,7 +2254,7 @@ def handle_keys():
 	                else:
 	                	message('you threw your {} at nothing'.format(curr_weap.owner.name))
 	                	if curr_weap.owner.name.split(' ')[1] in ['spear']:
-	                		message('you threw your {} at nothing'.format(curr_weap.owner.name))
+	                	
 	                		i_name = curr_weap.owner.name
 	                		for it in inventory:
 	                			if it.name == i_name:
