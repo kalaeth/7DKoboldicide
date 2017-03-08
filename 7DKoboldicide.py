@@ -739,7 +739,7 @@ class Item:
         else:
         	self.owner.x = x
         	self.owner.y = y
-        	message('You threw a ' + self.owner.name + '.', libtcod.yellow)
+        	#message('You threw a ' + self.owner.name + '.', libtcod.yellow)
 
 
     def use(self):
@@ -2160,6 +2160,8 @@ def handle_keys():
 	                if player.fighter.orientation == NORTH:
 	                    for _y in range(player.y-1,0, -1):
 	                        if map[player.x][_y].blocked or _break:
+				    endx = _x
+				    endy = _y
 	                            break
 	                        for f in fs:
 	                            if f.x == _x and f.y == _y:
@@ -2181,6 +2183,8 @@ def handle_keys():
 	                elif player.fighter.orientation == EAST:
 	                    for _x in range(player.x+1, MAP_WIDTH):
 	                        if map[_x][player.y].blocked or _break:
+				    endx = _x
+				    endy = _y
 	                            break
 	                        for f in fs:
 	                            if f.x == _x and f.y == _y:
@@ -2201,6 +2205,8 @@ def handle_keys():
 	                elif player.fighter.orientation == SOUTH:
 	                    for _y in range(player.y+1, MAP_HEIGHT):
 	                        if map[player.x][_y].blocked or _break:
+				    endx = _x
+				    endy = _y
 	                            break
 	                        for f in fs:
 	                            if f.x == _x and f.y == _y:
@@ -2222,6 +2228,8 @@ def handle_keys():
 	                elif player.fighter.orientation == WEST:
 	                    for _x in range(player.x-1,0,-1):
 	                        if map[_x][player.y].blocked or _break:
+				    endx = _x
+				    endy = _y
 	                            break
 	                        for f in fs:
 	                            if f.x == _x and f.y == _y:
