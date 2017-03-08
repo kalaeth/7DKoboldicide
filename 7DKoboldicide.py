@@ -53,9 +53,9 @@ WEST = '<'
 
 
 #health       0     1          2        3       4      5      6
-HEALTH = ['dead','crippled','injured','weak','so-so','ok','fine!',]
-#health                        0                  1          2        3              4               5      6
-HEALTH_COLOR = [libtcod.darker_red, libtcod.dark_red, libtcod.red, libtcod.orange, libtcod.lime,libtcod.chartreuse, libtcod.green]
+HEALTH = ['dead','crippled','injured','weak','so-so','ok','good',]
+#health                        0                  1          2        3              4               5                 6
+HEALTH_COLOR = [libtcod.darker_red, libtcod.dark_red, libtcod.red, libtcod.orange, libtcod.lime,libtcod.chartreuse, libtcod.green, libtcod.white]
 #experience and level-ups
 LEVEL_UP_BASE = 200
 LEVEL_UP_FACTOR = 150
@@ -94,7 +94,7 @@ CHAR_DOOR = ']'
 
 class Dialog:
     def __init__(self,_char,_level,_value):
-        self.characther = _char
+        self.character = _char
         self.level = _level
         self.value = _value
 
@@ -113,7 +113,7 @@ class Dialogs:
         for sentence in self.list:
             if sentence.character == _char and sentence.level == _level:
                 return sentence
-            elif sentence.characther == _char and sentence.level > _level:
+            elif sentence.character == _char and sentence.level > _level:
                 rt_sentence = sentence 
         return rt_sentence
 
@@ -131,11 +131,12 @@ class Dialogs:
                         break
 
         for _d in _dialogs_:
-                dd = _d.split(' ')
+                dd = _d.split(':')
                 if dd[0] == 'END':
                     break
                 else:
-                    self.addSetting(dd[0],dd[1],dd[2]);
+                    print dd[0] +':'+ dd[1] +':'+ dd[2]
+                    self.list.append(Dialog(dd[0],dd[1],dd[2]));
  
 class Tile:
     #a tile of the map and its properties
@@ -206,7 +207,9 @@ class Notif:
             if x is not None:
                 #set the color and then draw the character that represents this object at its position
                 libtcod.console_set_default_foreground(con, self.color)
-                libtcod.console_print_ex(con, x, y, libtcod.BKGND_SCREEN,  libtcod.LEFT,self.message)
+                libtcod.console_set_default_background(con, libtcod.black)
+
+                libtcod.console_print_ex(con, x, y, libtcod.BKGND_SET,  libtcod.LEFT,self.message)
 
     def wipe(self,con):
         #erase the character that represents this object
@@ -998,13 +1001,21 @@ def make_map(terrain=CHAR_MOUNTAIN):
     rooms = []
     num_rooms = 0
     max_rooms_here = MAX_ROOMS
+    r_min = ROOM_MIN_SIZE
+    r_max = ROOM_MAX_SIZE
+
+    if terrain == CHAR_FOREST:
+    	max_rooms_here += MAX_ROOMS*15
+    	r_max = 8
+    	r_min = 5
+
     if terrain == CHAR_MOUNTAIN:
     	max_rooms_here += MAX_ROOMS*6
  
     for r in range(max_rooms_here):
         #random width and height
-        w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
+        w = libtcod.random_get_int(0, r_min, r_max)
+        h = libtcod.random_get_int(0, r_min, r_max)
         #random position without going out of the boundaries of the map
         x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
         y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
@@ -1336,14 +1347,14 @@ def place_homes(room):
     map[x-2][y-2] = Tile(True,terrain='-')
     map[x-1][y-2] = Tile(True,terrain='-')
     map[x-3][y-2] = Tile(True,terrain='-')
-    map[x-1][y-3] = Tile(True,terrain='|')
+    map[x-3][y-3] = Tile(True,terrain='|')
     map[x-2][y-3] = Tile(True,terrain='_')
-    map[x-3][y-3] = Tile(True,terrain=']')
+    map[x-1][y-3] = Tile(True,terrain=']')
     map[x-1][y-4] = Tile(True,terrain='-')
     map[x-2][y-4] = Tile(True,terrain='-')
     map[x-3][y-4] = Tile(True,terrain='-')
 
-    addMonster('farmer', x-3, y-3)
+    addMonster('farmer', x-1, y-3)
 
 
 
@@ -1407,6 +1418,9 @@ def addItem(name,x=-1,y=-1):
     if name == 'wooden spear':
         equipment_component = Equipment(slot='right hand', power_bonus=2)
         item = Object(x, y, '|', 'wooden spear', libtcod.sky, equipment=equipment_component)
+    elif name == 'wooden stick':
+        equipment_component = Equipment(slot='right hand', power_bonus=4)
+        item = Object(x, y, 'i', 'wooden stick', libtcod.sky, equipment=equipment_component)
     elif name == 'wooden boomerang':
         equipment_component = Equipment(slot='right hand', power_bonus=4)
         item = Object(x, y, '(', 'wooden boomerang', libtcod.sky, equipment=equipment_component)
@@ -2086,7 +2100,7 @@ def handle_keys():
                         elif map[player.x][player.y].terrain in ['>','<',CHAR_STAIRS]:
                             t = CHAR_MOUNTAIN
                             for x in range(player.x-2,player.x+2):
-                                for y in range(player.y-1,player.y+1):
+                                for y in range(player.y-2,player.y+2):
                                     if map[x][y].terrain not in [CHAR_GRASS,CHAR_LONG_GRASS,CHAR_TALL_GRASS,'<','>']:
                                         t = map[x][y].terrain
                                         break     
@@ -2107,19 +2121,16 @@ def handle_keys():
             if key_char in ['c','C'] or key.vk == libtcod.KEY_KP3:
                 opt = 5
                 while opt > 0:
-                    opt = arrow_menu('--game menu--',['mini map','inventory','drop stuff','char info','quit'],15,0,2,2)
+                    opt = arrow_menu('--game menu--',['inventory','drop stuff','char info','quit'],15,0,2,2)
                     if opt == 0:
-                        mini_map()
-                        continue
-                    elif opt == 1:
                         chosen_item = inventory_menu('use / equip \n select with action, cancel with menu.\n')
                         if chosen_item is not None:
                             chosen_item.use()
-                    elif opt == 2:
+                    elif opt == 1:
                         chosen_item = inventory_menu('drop \n select with action, cancel with menu.\n')
                         if chosen_item is not None:
                             chosen_item.drop()
-                    elif opt == 3:
+                    elif opt == 2:
                         level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
                         _sk_ = ''
                         for skill in player.fighter.skills:
@@ -2127,7 +2138,7 @@ def handle_keys():
 
                         msgbox('the koboldicider\n\nMaximum HP: ' + str(player.fighter.max_hp) +
                            '\nAttack: ' + str(player.fighter.power) + '\nDefense: ' + str(player.fighter.defense)+'\n skills: \n'+_sk_, CHARACTER_SCREEN_WIDTH)
-                    elif opt == 4:
+                    elif opt == 3:
                         opt = -1
                         return 'exit'
             if key_char in ['q','Q'] or key.vk == libtcod.KEY_KP1:
@@ -2224,11 +2235,24 @@ def handle_keys():
 	                if not fit is None:
 	                	notifications.append(Notif('*',5,_x,_y))
 	                	if curr_weap.owner.name.split(' ')[1] in ['spear']:
-	                		#curr_weap.owner.item.drop(endx,endy)
 	                		message('you threw your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
+	                		i_name = curr_weap.owner.name
+	                		for it in inventory:
+	                			if it.name == i_name:
+	                				it.item.drop(endx,endy)
+	                				break;
 	                	else:
 	                		message('you shot your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
 	                	fit.fighter.take_damage(dmg)
+	                else:
+	                	message('you threw your {} at nothing'.format(curr_weap.owner.name))
+	                	if curr_weap.owner.name.split(' ')[1] in ['spear']:
+	                		message('you threw your {} at nothing'.format(curr_weap.owner.name))
+	                		i_name = curr_weap.owner.name
+	                		for it in inventory:
+	                			if it.name == i_name:
+	                				it.item.drop(endx,endy)
+	                				break;
 
             if key_char in ['f','F'] or key.vk == libtcod.KEY_KP9:
             	curr_weap = get_equipped_in_slot('right hand')
@@ -2448,7 +2472,7 @@ def load_game():
 
  
 def new_game():
-    global player, inventory, weapon_inv, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects, notifications
+    global player, inventory, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects, notifications
  
     #create object representing the player
     fighter_component = PlayerFighter(hp=6, defense=1, power=2, xp=0, death_function=player_death)
@@ -2536,6 +2560,7 @@ def play_game():
 
     (camera_x, camera_y) = (0, 0)
     dialogs = Dialogs()
+    dialogs.loadFromFile()
     player_action = None
     #notifications = []
     mouse = libtcod.Mouse()
@@ -2620,6 +2645,12 @@ def swing_sword(_x,_y):
            ai_component = BasicMonster()
            monster = Object(_x, _y, '-', 'worm', libtcod.desaturated_red,blocks=True, fighter=fighter_component, ai=ai_component)
            initialize_fov()
+    elif map[_x][_y].terrain in [CHAR_FOREST]:
+    	drop = random.randint(1,42)
+        if drop >= 37:
+           addItem('wooden stick',_x,_y)
+        
+
 
 
 def main_menu():
