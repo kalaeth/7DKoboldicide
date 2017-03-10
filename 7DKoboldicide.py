@@ -1756,7 +1756,7 @@ def add_dragon():
     fighter_component = Fighter(hp=20, defense=9, power=8, xp=800, death_function=monster_death)
     ai_component = BasicMonster()
     monster = Object(40, 10, 'O', 'dragon head', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
+    fighter_component = Fighter(hp=6, defense=10, power=0, xp=5, death_function=monster_death)
     ai_component = Body(monster)
     monster_body = Object(40,9, '*', 'dragon upper body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
@@ -1765,7 +1765,7 @@ def add_dragon():
     fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
     ai_component = Body(monster_body)
     monster_body3 = Object(40,7, '*', 'dragon lower body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=6, defense=7, power=2, xp=5, death_function=monster_death)
+    fighter_component = Fighter(hp=6, defense=5, power=2, xp=5, death_function=monster_death)
     ai_component = Body(monster_body)
     monster_tail = Object(40,8, 'v', 'dragon tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     objects.append(monster)
@@ -2719,6 +2719,13 @@ def monster_death(monster):
         	addItem('leather armour',monster.x,monster.y)
         elif _drop_ <= 10:
             addItem('hat', monster.x,monster.y)
+                                                     
+    if monster.name.split()[0] in ['dragon'] and not  monster.name.split()[1] in ['head']:
+        for obj in objects:
+            if obj.name == 'dragon head':
+               obj.fighter.defense -= 1
+        
+
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
     message('+' + str(monster.fighter.xp) + 'xp.', libtcod.orange)
