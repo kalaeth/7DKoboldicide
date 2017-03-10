@@ -422,7 +422,10 @@ class PlayerFighter:
     def __init__(self, hp, defense, power, xp, death_function=None,attack_speed=DEFAULT_ATTACK_SPEED,generation=3):
         self.base_max_hp = hp
         self.hp = hp
-        self.color = HEALTH_COLOR[hp]
+        if hp < 7:
+            self.color = HEALTH_COLOR[hp]
+        else:
+            self.color = libtcod.white
         self.base_defense = defense
         self.base_power = power
         self.xp = xp
@@ -508,7 +511,12 @@ class PlayerFighter:
             self.hp -= damage
             if self.hp < 0:
             	self.hp = 0
-            self.color = HEALTH_COLOR[self.hp]
+            elif self.hp < 7:
+                self.color = HEALTH_COLOR[self.hp]
+            else:
+                self.color = libtcod.white
+
+            
             #check for death. if there's a death function, call it
             if self.hp <= 0:
                 function = self.death_function
@@ -521,7 +529,10 @@ class PlayerFighter:
     def heal(self, amount):
         #heal by the given amount, without going over the maximum
         self.hp += amount
-        self.color = HEALTH_COLOR[self.hp]
+        if self.hp > 7:
+            self.color = libtcod.white
+        else:
+            self.color = HEALTH_COLOR[self.hp]
         if self.hp > self.max_hp:
             self.hp = self.max_hp
 					
@@ -679,7 +690,10 @@ class Shopowner:
     			if player.fighter.purse >= 5:
     				player.fighter.purse -= 5
     				player.fighter.hp = player.fighter.base_max_hp
-    				player.fighter.color = HEALTH_COLOR[player.fighter.hp]
+                    if player.fighter.hp < 7:
+    				    player.fighter.color = HEALTH_COLOR[player.fighter.hp]
+                    else:
+                        player.fighter.color = libtcod.white
     				shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
     			else:
     				shpowner.fighter.talk(random.choice(['i don\'t work for free', 'and how will you pay?','come back with money!']))		
@@ -710,7 +724,10 @@ class Fighter:
     def __init__(self, hp, defense, power, xp, death_function=None,attack_speed=DEFAULT_ATTACK_SPEED,state='agressive'):
         self.base_max_hp = hp
         self.hp = hp
-        self.color = HEALTH_COLOR[hp]
+        if self.hp < 7:
+            self.color = HEALTH_COLOR[hp]
+        else:
+            self.color = libtcod.white
         self.base_defense = defense
         self.base_power = power
         self.xp = xp
@@ -766,7 +783,10 @@ class Fighter:
         #apply damage if possible
         if damage > 0:
             self.hp -= damage
-            self.color = HEALTH_COLOR[self.hp]
+            if hp > 0:
+                self.color = HEALTH_COLOR[self.hp]
+            else:
+                self.color = HEALTH_COLOR[0]
             #check for death. if there's a death function, call it
             if self.hp <= 0:
                 function = self.death_function
@@ -785,7 +805,10 @@ class Fighter:
         self.hp += amount
         if self.hp > self.max_hp:
             self.hp = self.max_hp
-        self.color = HEALTH_COLOR[self.hp]
+        if self.hp < 7:
+            self.color = HEALTH_COLOR[self.hp]
+        else:
+            self.color = libtcod.white
 
     def talk(self,text,color=libtcod.yellow):
     	#if self.owner.x +1+ len(text) < MAP_WIDTH:
@@ -910,12 +933,12 @@ class Equipment:
         message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
  
 def get_available_slots():
-    slots = ['right hand','left hand','body','back','neck']
+    slots = ['right hand','left hand','head','body','back','neck']
     for obj in inventory:
         if obj.equipment and obj.equipment.is_equipped:
         	if obj.name.split()[1] in ['backpack','bag']:
         		if obj.equipment.capacity > 0:
-        			slots.append(obj.name.split()[1] in ['backpack','bag'])
+        			slots.append(obj.name.split()[1])
         	slots.remove(obj.equipment.slot)
     return slots
 
@@ -1554,14 +1577,14 @@ def place_objects(room):
  
     #chance of each item (by default they have a chance of 0 at level 1, which then goes up)
     item_chances = {}
-    item_chances['wooden spear'] = 35  
+    #item_chances['wooden spear'] = 35  
     item_chances['bag'] = 35  
-    item_chances['backpack'] = 35  
-    item_chances['wooden boomerang'] = 35  
-    item_chances['short sword'] = 35
-    item_chances['long sword'] =  from_dungeon_level([[25, 6]])
-    item_chances['leather armour'] = 35
-    item_chances['metal armour'] = from_dungeon_level([[5, 4]])
+    #item_chances['backpack'] = 35  
+    #item_chances['wooden boomerang'] = 35  
+    #item_chances['short sword'] = 35
+    #item_chances['long sword'] =  from_dungeon_level([[25, 6]])
+    #item_chances['leather armour'] = 35
+    #item_chances['metal armour'] = from_dungeon_level([[5, 4]])
  
  
     #choose random number of monsters
@@ -1618,8 +1641,16 @@ def addItem(name,x=-1,y=-1,player=True):
         equipment_component = Equipment(slot='right hand', capacity=3)
         item = Object(x, y, 'a', 'plastic bag', libtcod.white, equipment=equipment_component)
     elif name == 'backpack':
-        equipment_component = Equipment(slot='back', capacity=5)
-        item = Object(x, y, 'a', 'fancy backpack', libtcod.white, equipment=equipment_component)
+        if random.randint(0,3) > 2:
+            equipment_component = Equipment(slot='back', capacity=5)
+            item = Object(x, y, 'a', 'fancy backpack', libtcod.white, equipment=equipment_component)
+        else:
+            equipment_component = Equipment(slot='back', capacity=4)
+            item = Object(x, y, 'a', 'ugly backpack', libtcod.white, equipment=equipment_component)
+    elif name == 'hat':
+        equipment_component = Equipment(slot='head')
+        nm = choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party '])
+        item = Object(x, y, 'a', '{} hat'.format(nm), libtcod.white, equipment=equipment_component)
     else:
     	equipment_component = Equipment(slot='neck', defense_bonus=0)
     	item = Object(x,y,'*','fashion statement colar', libtcod.yellow, equipment=equipment_component)
@@ -2147,7 +2178,11 @@ def render_all():
     #libtcod.console_print_ex(panel, )
     libtcod.console_print_ex(panel_v, 1, 10, libtcod.BKGND_NONE, libtcod.LEFT, '----------')
     hp = player.fighter.hp
-    libtcod.console_set_default_foreground(panel_v, HEALTH_COLOR[hp])
+    if hp < 7:
+        __color = HEALTH_COLOR[hp]
+    else:
+        __color = libtcod.white
+    libtcod.console_set_default_foreground(panel_v, __color)
     libtcod.console_print_ex(panel_v, 1, 11, libtcod.BKGND_NONE, libtcod.LEFT, ' [{}]'.format(HEALTH[hp]))
     libtcod.console_set_default_foreground(panel_v, libtcod.white)
     libtcod.console_print_ex(panel_v, 1, 13, libtcod.BKGND_NONE, libtcod.LEFT, 'floor  ['+str(dungeon_level)+']')
@@ -2158,23 +2193,27 @@ def render_all():
 
     rhand = get_equipped_in_slot('right hand')
     if rhand is not None:
-        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(rhand.owner.name.split(' ')[1]))
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'r[{}]'.format(rhand.owner.name.split(' ')[1]))
         y+=1
     lhand = get_equipped_in_slot('left hand')
     if lhand is not None:
-        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(lhand.owner.name.split(' ')[1]))
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'l[{}]'.format(lhand.owner.name.split(' ')[1]))
+        y+=1
+    head = get_equipped_in_slot('head')
+    if head is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'h[{}]'.format(head.owner.name.split(' ')[1]))
         y+=1
     neck = get_equipped_in_slot('neck')
     if neck is not None:
-        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(neck.owner.name.split(' ')[1]))
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'n[{}]'.format(neck.owner.name.split(' ')[1]))
         y+=1
     back = get_equipped_in_slot('back')
     if back is not None:
-        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(back.owner.name.split(' ')[1]))
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'b[{}]'.format(back.owner.name.split(' ')[1]))
         y+=1
     body = get_equipped_in_slot('body')
     if body is not None:
-        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(body.owner.name.split(' ')[1]))
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'b[{}]'.format(body.owner.name.split(' ')[1]))
 	
     #libtcod.console_print_ex(panel_v, 1, 17, libtcod.BKGND_NONE, libtcod.LEFT, 'lHand[{}]'.format(get_equipped_in_slot('right hand'))
  
@@ -2516,14 +2555,17 @@ def handle_keys():
             	if curr_weap is not None and curr_weap.owner.name.split(' ')[1] == 'bag' or weap_2 is not None and weap_2.owner.name.split(' ')[1] == 'bag':
             		orien = player.fighter.orientation
             		if orien == EAST:
-            			player_move_or_attack(1, 0,False)
+            			if player_move_or_attack(1, 0,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
             		elif orien == WEST:
-            			player_move_or_attack(-1, 0,False)
+            			if player_move_or_attack(-1, 0,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
             		elif orien == NORTH:
-            			player_move_or_attack(0, -1,False)
+            			if player_move_or_attack(0, -1,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
             		elif orien == SOUTH:
-            			player_move_or_attack(0, 1,False)
-
+            			if player_move_or_attack(0, 1,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
             	if weap_2 is not None and weap_2.owner.name.split(' ')[1] not in ['sword','axe','stick']:
             		if weap_2.owner.name.split(' ')[1] in ['sword','axe','stick']:
             			curr_weap = weap_2
@@ -2634,12 +2676,15 @@ def player_death(player):
 def monster_death(monster):
     global objects
     if monster.name.split(' ')[0] in ['kobold']:
-    	if random.randint(3,10) > 5:
-    		if random.randint(0,13) ==7:
-        		addItem('wooden spear',monster.x,monster.y)
-        	elif random.randint(0,13) ==7:
-        		addItem('short sword',monster.x,monster.y)
+        _drop_ = random.randint(3,10)
+    	if _drop_ <= 3:
+            addItem('wooden spear',monster.x,monster.y)
+        elif _drop_ <=5:
+        	addItem('short sword',monster.x,monster.y)
+        elif _drop_ <= 7:
         	addItem('leather armour',monster.x,monster.y)
+        elif _drop_ <= 10:
+            addItem('hat', monster.x,monster.y)
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
     message('+' + str(monster.fighter.xp) + 'xp.', libtcod.orange)
