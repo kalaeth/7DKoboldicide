@@ -1155,7 +1155,7 @@ def make_world_map(grassness=20,start=False):
 
 
 
-def make_map(terrain=CHAR_MOUNTAIN):
+def make_map(terrain=CHAR_MOUNTAIN, name = ''):
     global map, objects, stairs
  
     #the list of objects with just the player
@@ -1176,11 +1176,13 @@ def make_map(terrain=CHAR_MOUNTAIN):
     r_min = ROOM_MIN_SIZE
     r_max = ROOM_MAX_SIZE
 
-    if terrain == CHAR_FOREST:
+    if terrain == CHAR_FOREST or name.split()[1] in ['forest','wood]':
     	max_rooms_here += MAX_ROOMS*15
     	r_max = 8
     	r_min = 5
+	    _stairs_ = False						     
 
+                                                     
     if terrain == CHAR_MOUNTAIN:
     	max_rooms_here += MAX_ROOMS*6
  
@@ -1235,6 +1237,8 @@ def make_map(terrain=CHAR_MOUNTAIN):
             #add some contents to this room, such as monsters
             if terrain in [CHAR_LAKE]:
             	place_homes(new_room)
+                _stairs_ = False
+                                                     
             else:
             	place_objects(new_room)
             
@@ -1244,10 +1248,11 @@ def make_map(terrain=CHAR_MOUNTAIN):
             num_rooms += 1
  
     #create stairs at the center of the last room
-    stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
-    map[new_x][new_y].terrain = '<'
-    objects.append(stairs)
-    stairs.send_to_back()  #so it's drawn below the monsters
+    if _stairs_:
+    	#stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
+        map[new_x][new_y].terrain = '<'
+        #objects.append(stairs)
+        #stairs.send_to_back()  #so it's drawn below the monsters
 
     map[player.x][player.y].terrain = '>'
     map[player.x][player.y].color = libtcod.yellow
@@ -1313,8 +1318,6 @@ def make_customgenericmap(terrain = CHAR_MOUNTAIN):
             new_obj = [ob]
             break
     objects = new_obj
-
-
 
     for y in range(MAP_HEIGHT1):
         for x in range(MAP_WIDTH1):
@@ -1639,18 +1642,18 @@ def addItem(name,x=-1,y=-1,player=True):
         item = Object(x, y, 'a', 'metal armour', libtcod.silver, equipment=equipment_component)
     elif name == 'bag':
         equipment_component = Equipment(slot='right hand', capacity=3)
-        item = Object(x, y, 'a', 'plastic bag', libtcod.white, equipment=equipment_component)
+        item = Object(x, y, '#', 'plastic bag', libtcod.white, equipment=equipment_component)
     elif name == 'backpack':
         if random.randint(0,3) > 2:
             equipment_component = Equipment(slot='back', capacity=5)
-            item = Object(x, y, 'a', 'fancy backpack', libtcod.white, equipment=equipment_component)
+            item = Object(x, y, '#', 'fancy backpack', libtcod.white, equipment=equipment_component)
         else:
             equipment_component = Equipment(slot='back', capacity=4)
-            item = Object(x, y, 'a', 'ugly backpack', libtcod.white, equipment=equipment_component)
+            item = Object(x, y, '#', 'ugly backpack', libtcod.white, equipment=equipment_component)
     elif name == 'hat':
         equipment_component = Equipment(slot='head')
         nm = choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party '])
-        item = Object(x, y, 'a', '{} hat'.format(nm), libtcod.white, equipment=equipment_component)
+        item = Object(x, y, '^', '{} hat'.format(nm), libtcod.white, equipment=equipment_component)
     else:
     	equipment_component = Equipment(slot='neck', defense_bonus=0)
     	item = Object(x,y,'*','fashion statement colar', libtcod.yellow, equipment=equipment_component)
@@ -2874,7 +2877,7 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world'):
     	elif dl < 3:
             save_floor('{}_{}F.dng'.format(name,dungeon_level))
             dungeon_level+=1
-            make_map(terrain)  #create a fresh new level!
+            make_map(name=name)  #create a fresh new level!
             initialize_fov()
         elif dl < 4:
         	save_floor('{}_{}F.dng'.format(name,dungeon_level))
