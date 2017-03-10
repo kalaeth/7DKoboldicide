@@ -92,6 +92,21 @@ CHAR_MOUNTAIN = '#'
 CHAR_STAIRS = '<'
 CHAR_DOOR = ']'
 
+class Dungeon:
+	def __init__(self,name,x,y):
+		self.name = name
+		self.x = x
+		self.y = y
+
+def get_dungeon_name(x,y):
+	global dung_list
+
+	for d in dung_list:
+		if d.x == x and d.y == y:
+			print d.name
+			return d.name
+
+
 class Dialog:
     def __init__(self,_char,_state,_value):
         self.character = _char
@@ -466,9 +481,9 @@ class PlayerFighter:
         hits = 0
         for i in range(0,self.power):
             rolls.append(random.randint(1,10))
-        roll_history = ""
+        roll_history = "["
         for roll in rolls:
-            roll_history += '[{}]'.format(roll)
+            roll_history += ' {} '.format(roll)
             if roll == 10:
                 hits+=2
             elif roll > target.fighter.defense:
@@ -491,6 +506,8 @@ class PlayerFighter:
         #apply damage if possible
         if damage > 0:
             self.hp -= damage
+            if self.hp < 0:
+            	self.hp = 0
             self.color = HEALTH_COLOR[self.hp]
             #check for death. if there's a death function, call it
             if self.hp <= 0:
@@ -618,8 +635,10 @@ class Shopowner:
                 profession = monster.name.split()[0]
                 if profession in ['lumberjack']:
                     slogan = random.choice(['i sell axes','imma lumbjak','nd i\'m ok'])
+                if profession in ['blacksmith']:
+                    slogan = random.choice(['get metal','metal suits!'])
                 elif profession in ['leathersmith']:
-                    slogan = random.choice(['armooours!','leather looks good on you'])
+                    slogan = random.choice(['armours!','leather looks good on you'])
                 else:
                     slogan = random.choice(['heeeey baby!','i\'m yours for 5',';)', ])
 
@@ -789,18 +808,41 @@ class Item:
         self.use_function = use_function
  
     def pick_up(self):
-    	global inventory
-        #add to the player's inventory and remove from the map
-        inventory.append(self.owner)
-        objects.remove(self.owner)
-        message('You picked up a ' + self.owner.name + '!', libtcod.green)
-        #special case: automatically equip, if the corresponding equipment slot is unused
+        global inventory
+
+        #check if there are available slots:
+        slt = get_available_slots()
+        print slt
+        pick_up = False
+
+        if len(slt) < 1:
+        	message('you can\'t carry that ' + self.owner.name + '!', libtcod.red)
+        	return
+        	
         equipment = self.owner.equipment
-        if equipment and get_equipped_in_slot(equipment.slot) is None:
+        if equipment and equipment.slot in slt:
             equipment.equip()
+            pick_up = True
         elif equipment and (equipment.slot.split(' ')[0] == 'right') and (get_equipped_in_slot('left hand') is None):
         	equipment.slot = 'left hand'
         	equipment.equip()
+        	pick_up = True
+
+        if 'bag' in slt:
+        	pick_up = True
+        	equipment.capacity -=1
+        	#not equipment.
+        if 'backpack' in slt:
+        	pick_up = True
+        	equipment.capacity -=1
+
+        if pick_up:
+	    	#add to the player's inventory and remove from the map
+        	inventory.append(self.owner)
+        	objects.remove(self.owner)
+        	message('You picked up a ' + self.owner.name + '!', libtcod.green)
+        else:
+        	message('you can\'t carry that ' + self.owner.name + '!', libtcod.red)
 
  
     def drop(self,x=-1,y=-1):
@@ -836,10 +878,11 @@ class Item:
  
 class Equipment:
     #an object that can be equipped, yielding bonuses. automatically adds the Item component.
-    def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0):
+    def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0,capacity=0):
         self.power_bonus = power_bonus
         self.defense_bonus = defense_bonus
         self.max_hp_bonus = max_hp_bonus
+        self.capacity = capacity
  
         self.slot = slot
         self.is_equipped = False
@@ -866,18 +909,16 @@ class Equipment:
         self.is_equipped = False
         message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
  
-class Weapon:
-    #an object that can be shot
-    def __init__(self, name, power_bonus=0, ammo=0, max_ammo=10, radius=0):
-        self.name = name
-        self.power_bonus = power_bonus
-        #self.ammo = ammo
-        self.max_ammo = max_ammo
-        self.radius = radius
+def get_available_slots():
+    slots = ['right hand','left hand','body','back','neck']
+    for obj in inventory:
+        if obj.equipment and obj.equipment.is_equipped:
+        	if obj.name.split()[1] in ['backpack','bag']:
+        		if obj.equipment.capacity > 0:
+        			slots.append(obj.name.split()[1] in ['backpack','bag'])
+        	slots.remove(obj.equipment.slot)
+    return slots
 
-    #spends a shot and returns damage dealt
-    def shoot(self):
-        return self.power_bonus
   
 def get_equipped_in_slot(slot):  #returns the equipment in a slot, or None if it's empty
     for obj in inventory:
@@ -1010,9 +1051,16 @@ def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
     return s_thing
 
 
-def make_world_map(grassness=20,start=False):
-    global map, objects, stairs
 
+def make_world_map(grassness=20,start=False):
+    global map, objects, stairs, dung_list
+
+    dung_list = []
+    name_list = []
+    for i in range(0,6):
+    	n =  generateName(4)
+    	name_list.append(n)
+    print name_list
     if (grassness > MAP_WIDTH / 6):
         grassness = int(MAP_WIDTH / 6)
 
@@ -1033,16 +1081,40 @@ def make_world_map(grassness=20,start=False):
 
     place_thing(CHAR_MOUNTAIN,8,True,3);
     objects.append(stairs)
+    dung_list.append(Dungeon('dragon\'s spine montain',stairs.x, stairs.y))
+
     place_thing(CHAR_FOREST,6,True,1);
     objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    dung_list.append(Dungeon('{}\'s forest'.format(n),stairs.x, stairs.y))
+
     place_thing(CHAR_LAKE,6,True,3);
     objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    n += random.choice([' city',' town','ville'])
+    dung_list.append(Dungeon('{} '.format(n),stairs.x, stairs.y))
+
+
     place_thing(CHAR_MOUNTAIN,3,True,3);
     objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    dung_list.append(Dungeon('mount {}'.format(n),stairs.x, stairs.y))
+
     place_thing(CHAR_MOUNTAIN,4,True,3);
     objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    dung_list.append(Dungeon('mount {}'.format(n),stairs.x, stairs.y))
+
     place_thing(CHAR_FOREST,3,True,1);
     objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    dung_list.append(Dungeon('{} woods'.format(n),stairs.x, stairs.y))
+
     
     c = place_thing(CHAR_DIRT,7, False, 6);
     player.x, player.y = c
@@ -1163,30 +1235,40 @@ def getMapFromFile():
     portal = ['################################################################################',
         '################################################################################',
         '################################################################################',
-        '################################################################################',
-        '################################################################################',
-        '######################################     #####################################',
-        '####################################    x    ###################################',
-        '###################################           ##################################',
-        '##################################      _      #################################',
-        '################################## |         | #################################',
-        '##################################      u      #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '######################################## #######################################',
+        '#################################################################################',
+        '#######################################  x  #####################################',
+        '#####################################         ###################################',
+        '####################################           ##################################',
+        '##################################               ################################',
+        '#################################                 ###############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '################################                   ##############################',
+        '#################################                 ###############################',
+        '##################################               ################################',
+        '####################################           ##################################',
+        '#####################################         ###################################',
+        '#######################################     #####################################',
+        '########################################   ######################################',
+        '########################################   ######################################',
+        '########   ---                         #                               --- ######',
+        '########   |_[ @                       #  #                          @ ]_| ######',
+        '########   ---                            #                            --- ######',
+        '########################################  #######################################',
         '######################################## #######################################',
         '######################################## #######################################',
         '######################################    i#####################################',
         '######################################  z     y#################################',
         '######################################     #####################################',
+        '################################################################################',
         '################################################################################',
         '################################################################################',
         '################################################################################']
@@ -1201,27 +1283,41 @@ def make_customgenericmap(terrain = CHAR_MOUNTAIN):
     MAP_HEIGHT1 = len(smap)
     MAP_WIDTH1 = len(smap[0])
     map = [[Tile(True,terrain=terrain) for y in range(MAP_HEIGHT)] for x in range(MAP_WIDTH)]
+    princess = False
 
-    for y in range(MAP_HEIGHT1):
-        for x in range(MAP_WIDTH1):
-            if smap[y][x] == 'x':
-                new_x = x
-                new_y = y
-                map[x][y] = Tile(True,CHAR_MOUNTAIN)
-            elif smap[y][x] == 'y':
-                player.x = x
-                player.y = y
-            elif smap[y][x] == 'u':
-            	addMonster('princess',x,y)
-            elif smap[y][x] != '#':
-                map[x][y] = Tile(False,CHAR_TALL_GRASS)
-
-    #create stairs at the center of the last room
     for ob in objects:
         if ob.name == "dot":
             new_obj = [ob]
             break
     objects = new_obj
+
+
+
+    for y in range(MAP_HEIGHT1):
+        for x in range(MAP_WIDTH1):
+            t = smap[y][x]  
+            if t == 'x':
+                new_x = x
+                new_y = y
+                map[x][y] = Tile(False,CHAR_STAIRS)
+            elif t == 'y':
+                player.x = x
+                player.y = y
+            elif t == 'u':
+            	map[x][y] = Tile(False,CHAR_DIRT)
+            	addMonster('princess',x,y)
+            elif t == '@':
+            	if princess:
+            		map[x][y] = Tile(False,CHAR_DIRT)
+            		addMonster('princess',x,y)
+            		princess = True
+            	else:
+            		map[x][y] = Tile(False,CHAR_DIRT)
+            		addMonster('nurse',x,y)
+            elif t != '#':
+                map[x][y] = Tile(False,t)
+
+    #create stairs at the center of the last room
 
 
     stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
@@ -1459,6 +1555,8 @@ def place_objects(room):
     #chance of each item (by default they have a chance of 0 at level 1, which then goes up)
     item_chances = {}
     item_chances['wooden spear'] = 35  
+    item_chances['bag'] = 35  
+    item_chances['backpack'] = 35  
     item_chances['wooden boomerang'] = 35  
     item_chances['short sword'] = 35
     item_chances['long sword'] =  from_dungeon_level([[25, 6]])
@@ -1477,7 +1575,7 @@ def place_objects(room):
         #only place it if the tile is not blocked
         if not is_blocked(x, y):
             choice = random_choice(monster_chances)
-            addMonster(choice,x,y)
+            addMonster(choice,x,y,'agressive')
 
     #choose random number of items
     num_items = libtcod.random_get_int(0, 0, 1) # max_items)
@@ -1500,22 +1598,28 @@ def addItem(name,x=-1,y=-1,player=True):
         item = Object(x, y, '|', 'wooden spear', libtcod.dark_sepia, equipment=equipment_component)
     elif name == 'wooden stick':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
-        item = Object(x, y, '/', 'wooden stick', libtcod.sky, equipment=equipment_component)
+        item = Object(x, y, '/', 'wooden stick', libtcod.light_sepia, equipment=equipment_component)
     elif name == 'work axe':
         equipment_component = Equipment(slot='right hand', power_bonus=2)
-        item = Object(x, y, 'P', 'work axe', libtcod.sky, equipment=equipment_component)
+        item = Object(x, y, 'P', 'work axe', libtcod.silver, equipment=equipment_component)
     elif name == 'wooden boomerang':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
-        item = Object(x, y, '(', 'wooden boomerang', libtcod.sky, equipment=equipment_component)
+        item = Object(x, y, '(', 'wooden boomerang', libtcod.light_sepia, equipment=equipment_component)
     elif name == 'short sword':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
-        item = Object(x, y, '-', 'short sword', libtcod.sky, equipment=equipment_component)
+        item = Object(x, y, '-', 'short sword', libtcod.silver, equipment=equipment_component)
     elif name == 'leather armour':
         equipment_component = Equipment(slot='body', defense_bonus=2)
-        item = Object(x, y, 'a', 'leather armour', libtcod.green, equipment=equipment_component)
+        item = Object(x, y, 'a', 'leather armour', libtcod.sepia, equipment=equipment_component)
     elif name == 'metal armour':
         equipment_component = Equipment(slot='body', defense_bonus=3)
-        item = Object(x, y, 'a', 'metal armour', libtcod.green, equipment=equipment_component)
+        item = Object(x, y, 'a', 'metal armour', libtcod.silver, equipment=equipment_component)
+    elif name == 'bag':
+        equipment_component = Equipment(slot='right hand', capacity=3)
+        item = Object(x, y, 'a', 'plastic bag', libtcod.white, equipment=equipment_component)
+    elif name == 'backpack':
+        equipment_component = Equipment(slot='back', capacity=5)
+        item = Object(x, y, 'a', 'fancy backpack', libtcod.white, equipment=equipment_component)
     else:
     	equipment_component = Equipment(slot='neck', defense_bonus=0)
     	item = Object(x,y,'*','fashion statement colar', libtcod.yellow, equipment=equipment_component)
@@ -1534,7 +1638,7 @@ def generateName(_max_size = 6):
 		_name += random.choice(['a','e','a','e','i','o','u','y'])
 	
 	return _name
-def addMonster(name,x=-1,y=-1,state='none'):
+def addMonster(name,x=-1,y=-1,state='none',returnM=False):
 	if state == 'none':
 		if name.split()[0] in ['low_level','kobold']:
 			state = random.choice(['aggressive','watchfull'])
@@ -1563,11 +1667,11 @@ def addMonster(name,x=-1,y=-1,state='none'):
 	    monster = Object(x, y, 'k', 'kobold {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name == 'princess':
 	    fighter_component = Fighter(hp=7, defense=20, power=0, xp=0, death_function=monster_death, state='friendly')
-	    ai_component = BasicMonster()
+	    ai_component = Shopowner()
 	    monster = Object(x, y, '@', 'princess shmi', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name == 'farmer':
 	    fighter_component = Fighter(hp=6, defense=2, power=1, xp=0, death_function=monster_death, state='friendly')
-	    ai_component = BasicMonster()
+	    ai_component = Shopowner()
 	    monster = Object(x, y, '@', 'farmer {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name in ['lumberjack','leathersmith','blacksmith','nurse']:
 	    fighter_component = Fighter(hp=6, defense=2, power=1, xp=0, death_function=monster_death, state='friendly')
@@ -1578,6 +1682,8 @@ def addMonster(name,x=-1,y=-1,state='none'):
 	    ai_component = BasicMonster()
 	    monster = Object(x, y, '~', 'worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
 
+	if returnM:
+		return monster
 	objects.append(monster)
     
 def add_dragon():
@@ -1757,16 +1863,18 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
 def get_names(x,y):
     global mouse
     #return a string with the names of all objects under the mouse
- 
+ 	
     #(x, y) = (mouse.cx, mouse.cy)
  
     #create a list with the names of all objects at the mouse's coordinates and in FOV
     names = [obj.name for obj in objects
-             if obj.x == x and obj.y == y and obj.name != 'dot']
+             if obj.x == x and obj.y == y and obj.name != 'dot' and obj.name != 'stairs']
     if len(names) < 1:
     	names = map[x][y].terrain
-
-    names = ', '.join(names)  #join the names, separated by commas
+    if names in ['<','>'] and dungeon_level == 0:
+    	names = get_dungeon_name(x,y)
+    else:
+    	names = ', '.join(names)  #join the names, separated by commas
     return names
 
 def move_camera(target_x, target_y):
@@ -2045,16 +2153,28 @@ def render_all():
     libtcod.console_print_ex(panel_v, 1, 13, libtcod.BKGND_NONE, libtcod.LEFT, 'floor  ['+str(dungeon_level)+']')
     libtcod.console_print_ex(panel_v, 1, 14, libtcod.BKGND_NONE, libtcod.LEFT, 'compass['+player.fighter.orientation+']')
     libtcod.console_print_ex(panel_v, 1, 15, libtcod.BKGND_NONE, libtcod.LEFT, '$['+str(player.fighter.purse)+']')
+
+    y = 16
+
     rhand = get_equipped_in_slot('right hand')
     if rhand is not None:
-	    libtcod.console_print_ex(panel_v, 1, 16, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(rhand.owner.name.split(' ')[1]))
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(rhand.owner.name.split(' ')[1]))
+        y+=1
     lhand = get_equipped_in_slot('left hand')
     if lhand is not None:
-	    libtcod.console_print_ex(panel_v, 1, 17, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(lhand.owner.name.split(' ')[1]))
-
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(lhand.owner.name.split(' ')[1]))
+        y+=1
+    neck = get_equipped_in_slot('neck')
+    if neck is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(neck.owner.name.split(' ')[1]))
+        y+=1
+    back = get_equipped_in_slot('back')
+    if back is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(back.owner.name.split(' ')[1]))
+        y+=1
     body = get_equipped_in_slot('body')
     if body is not None:
-        libtcod.console_print_ex(panel_v, 1, 18, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(body.owner.name.split(' ')[1]))
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, '[{}]'.format(body.owner.name.split(' ')[1]))
 	
     #libtcod.console_print_ex(panel_v, 1, 17, libtcod.BKGND_NONE, libtcod.LEFT, 'lHand[{}]'.format(get_equipped_in_slot('right hand'))
  
@@ -2225,9 +2345,9 @@ def handle_keys():
                                         t = map[x][y].terrain
                                         break     
                             if map[player.x][player.y].terrain == '>':
-                            	next_level(dungeon_level,up=True)
+                            	next_level(dungeon_level,up=True,name=get_dungeon_name(player.x,player.y))
                             else:
-                            	next_level(dungeon_level,t,up=False)
+                            	next_level(dungeon_level,t,up=False,name=get_dungeon_name(player.x,player.y))
                             	key.vk == libtcod.KEY_KP5
                             break
                     elif object.x == _x and object.y == _y:
@@ -2393,7 +2513,7 @@ def handle_keys():
             if key_char in ['f','F'] or key.vk == libtcod.KEY_KP9:
             	curr_weap = get_equipped_in_slot('right hand')
             	weap_2 = get_equipped_in_slot('left hand')
-            	if weap_2 is not None and curr_weap.owner.name.split(' ')[1] not in ['sword','axe','stick']:
+            	if weap_2 is not None and weap_2.owner.name.split(' ')[1] not in ['sword','axe','stick']:
             		if weap_2.owner.name.split(' ')[1] in ['sword','axe','stick']:
             			curr_weap = weap_2
             	if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['sword','axe','stick']:
@@ -2502,9 +2622,12 @@ def player_death(player):
 
 def monster_death(monster):
     global objects
-    if monster.name.find('kobold') >0:
+    if monster.name.split(' ')[0] in ['kobold']:
     	if random.randint(3,10) > 5:
-        	addItem('wooden spear',monster.x,monster.y)
+    		if random.randint(0,13) ==7:
+        		addItem('wooden spear',monster.x,monster.y)
+        	elif random.randint(0,13) ==7:
+        		addItem('short sword',monster.x,monster.y)
         	addItem('leather armour',monster.x,monster.y)
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
@@ -2681,29 +2804,29 @@ def new_game():
 
     message('As you return from you errands, you find your house burning and a kobold eating your dog')
  
-def next_level(dl,terrain=CHAR_MOUNTAIN,up=False):
+def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world'):
     global dungeon_level
     #advance to the next level
 
     if not up:
-    	print "going down! dl[{}]".format(dungeon_level)
+    	print "going down! dl[{}] in [{}]".format(dungeon_level,name)
     	if dl == 0:
-            save_floor('world')
+            save_floor('world.dng')
             dungeon_level+=1
             make_map(terrain)  #create a fresh new level!
             initialize_fov()
-    	elif dl < 4:
-            save_floor('dungeon_{}_{}'.format(terrain,dungeon_level))
+    	elif dl < 3:
+            save_floor('{}_{}F.dng'.format(name,dungeon_level))
             dungeon_level+=1
             make_map(terrain)  #create a fresh new level!
             initialize_fov()
-        elif dl < 6:
-        	save_floor('dungeon_{}_{}'.format(terrain,dungeon_level))
+        elif dl < 4:
+        	save_floor('{}_{}F.dng'.format(name,dungeon_level))
         	make_map('-')
         	dungeon_level+=1
         	initialize_fov()
-        elif dl < 7:
-        	save_floor('dungeon_{}_{}'.format(terrain,dungeon_level))
+        elif dl < 5:
+        	save_floor('{}_{}F.dng'.format(name,dungeon_level))
         	make_customgenericmap('#')
         	lair = True
         	add_dragon()
@@ -2722,7 +2845,7 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False):
             dungeon_level = 0
         else:
             dungeon_level -= 1
-            load_floor('dungeon_{}_{}'.format(terrain,dungeon_level))
+            load_floor('{}_{}F.dng'.format(name,dungeon_level))
             initialize_fov()
     save_game()
 
