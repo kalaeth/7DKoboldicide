@@ -649,7 +649,7 @@ class Shopowner:
                 if profession in ['blacksmith']:
                     slogan = random.choice(['get metal','metal suits!'])
                 elif profession in ['leathersmith']:
-                    slogan = random.choice(['armours!','leather looks good on you'])
+                    slogan = random.choice(['leathers!','all leathers!'])
                 else:
                     slogan = random.choice(['heeeey baby!','i\'m yours for 5',';)', ])
 
@@ -672,18 +672,43 @@ class Shopowner:
     				shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
     			else:
     				shpowner.fighter.talk(random.choice(['no can do.','bring money next time!']))
-
-    	elif shpowner.name.split()[0] in ['leathersmith']:
-    		inv.append(addItem('leather armour',-1,-1,False))
-    		opt = arrow_menu('wanna buy an armor? 10$',['yes I would!','no thanks,got one already'],20,10,4,2)
-    		if opt == 0:
-    			if player.fighter.purse >= 10:
-    				player.fighter.purse -= 10
+    	elif shpowner.name.split()[0] in ['blacksmith']:
+    		opt = arrow_menu('wanna be more metal??',['short sword - 20$','long sword - 30$','metal armour - 40$','no thanks,got one already'],25,10,4,2)
+		    if opt == 3:
+                shpowner.fighter.talk(choice(['oh.. ok...','bye then]))
+            elif opt in [0,1,2]:
+                if opt == 0:
+                    price = 20
+                    inv.append(addItem('short sword',-1,-1,False))
+                elif opt == 1:
+                    inv.append(addItem('long sword',-1,-1,False))
+                    price = 30
+                elif opt == 2:
+                    price = 40
+                    inv.append(addItem('metal armour',-1,-1,False))
+    			if player.fighter.purse >= price:
+                    player.fighter.purse -= price
     				inventory.append(inv[0])
     				shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
     			else:
     				shpowner.fighter.talk(random.choice(['no money, no armor','do i look like charity?']))		
-
+    	elif shpowner.name.split()[0] in ['leathersmith']:
+    		opt = arrow_menu('wanna buy leather stuff?',['leather hat - 1$','leather armour - 10$','no thanks,got one already'],25,10,4,2)
+		    if opt == 2:
+                shpowner.fighter.talk(choice(['oh.. ok...','bye then']))
+            elif opt in [0,1]:
+                if opt == 0:
+                    price = 1
+                    inv.append(addItem('leather hat',-1,-1,False))
+                elif opt == 1:
+                    price = 10
+                    inv.append(addItem('leather armour',-1,-1,False))
+    			if player.fighter.purse >= price:
+                    player.fighter.purse -= price
+    				inventory.append(inv[0])
+    				shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
+    			else:
+    				shpowner.fighter.talk(random.choice(['no money, no armor','do i look like charity?']))		
     	elif shpowner.name.split()[0] in ['nurse']:
     		opt = arrow_menu('{} asks if you wish to heal for $5'.format(shpowner.name),[random.choice(['yes, please!','here you go','do take visa?']),random.choice(['i\'ll pass, thanks','sorry, mom won\'t let me','let me come back to it later...'])],20,10,4,2)
     		if opt == 0:
@@ -1634,6 +1659,9 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'short sword':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
         item = Object(x, y, '-', 'short sword', libtcod.silver, equipment=equipment_component)
+    elif name == 'long sword':
+        equipment_component = Equipment(slot='right hand', power_bonus=2)
+        item = Object(x, y, '-', 'long sword', libtcod.silver, equipment=equipment_component)
     elif name == 'leather armour':
         equipment_component = Equipment(slot='body', defense_bonus=2)
         item = Object(x, y, 'a', 'leather armour', libtcod.sepia, equipment=equipment_component)
@@ -1654,6 +1682,9 @@ def addItem(name,x=-1,y=-1,player=True):
         equipment_component = Equipment(slot='head')
         nm = choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party '])
         item = Object(x, y, '^', '{} hat'.format(nm), libtcod.white, equipment=equipment_component)
+    elif name == 'leather hat':
+        equipment_component = Equipment(slot='head')
+        item = Object(x, y, '^', 'leather hat', libtcod.white, equipment=equipment_component)
     else:
     	equipment_component = Equipment(slot='neck', defense_bonus=0)
     	item = Object(x,y,'*','fashion statement colar', libtcod.yellow, equipment=equipment_component)
@@ -1686,17 +1717,17 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
 		y = random.randint(0,MAP_HEIGHT-1)
 	if name.split()[0] in ['low_level','kobold']:
 	    #create a low level monster
-	    fighter_component = Fighter(hp=2, defense=0, power=1, xp=35, death_function=monster_death,state=state)
+	    fighter_component = Fighter(hp=2, defense=3, power=1, xp=35, death_function=monster_death,state=state)
 	    ai_component = BasicMonster()
 	    monster = Object(x, y, 'k', 'kobold {}'.format(personal_name), libtcod.light_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name.split()[0] in ['kobold','mid_level']:
 	    #create a monster_mid_level
-	    fighter_component = Fighter(hp=3, defense=2, power=2, xp=65, death_function=monster_death,state=state)
+	    fighter_component = Fighter(hp=3, defense=4, power=2, xp=65, death_function=monster_death,state=state)
 	    ai_component = BasicMonster()
 	    monster = Object(x, y, 'k', 'kobold {}'.format(personal_name), libtcod.red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name.split()[0] in ['kobold','high_level']:
 	    #create a high_level_monster
-	    fighter_component = Fighter(hp=4, defense=4, power=3, xp=85, death_function=monster_death,state=state)
+	    fighter_component = Fighter(hp=4, defense=4, power=2, xp=85, death_function=monster_death,state=state)
 	    ai_component = BasicMonster()
 	    monster = Object(x, y, 'k', 'kobold {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name == 'princess':
@@ -1704,15 +1735,15 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
 	    ai_component = Shopowner()
 	    monster = Object(x, y, '@', 'princess shmi', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name == 'farmer':
-	    fighter_component = Fighter(hp=6, defense=2, power=1, xp=0, death_function=monster_death, state='friendly')
+	    fighter_component = Fighter(hp=6, defense=8, power=1, xp=0, death_function=monster_death, state='friendly')
 	    ai_component = Shopowner()
 	    monster = Object(x, y, '@', 'farmer {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	elif name in ['lumberjack','leathersmith','blacksmith','nurse']:
-	    fighter_component = Fighter(hp=6, defense=2, power=1, xp=0, death_function=monster_death, state='friendly')
+	    fighter_component = Fighter(hp=6, defense=8, power=6, xp=0, death_function=monster_death, state='friendly')
 	    ai_component = Shopowner()
 	    monster = Object(x, y, '@', '{} {}'.format(name, personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
 	else:
-	    fighter_component = Fighter(hp=1, defense=1, power=1, xp=3, death_function=monster_death_no_loot,state='wandering')
+	    fighter_component = Fighter(hp=1, defense=0, power=1, xp=3, death_function=monster_death_no_loot,state='wandering')
 	    ai_component = BasicMonster()
 	    monster = Object(x, y, '~', 'worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
 
@@ -1722,21 +1753,21 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
     
 def add_dragon():
     global objects
-    fighter_component = Fighter(hp=6, defense=9, power=8, xp=800, death_function=monster_death)
+    fighter_component = Fighter(hp=20, defense=9, power=8, xp=800, death_function=monster_death)
     ai_component = BasicMonster()
     monster = Object(40, 10, 'O', 'dragon head', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
     ai_component = Body(monster)
-    monster_body = Object(40,9, '+', 'dragon upper body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    monster_body = Object(40,9, '*', 'dragon upper body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
     ai_component = Body(monster_body)
-    monster_body2 = Object(40,8, '+', 'dragon mid body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    monster_body2 = Object(40,8, '*', 'dragon mid body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
     ai_component = Body(monster_body)
-    monster_body3 = Object(40,7, '+', 'dragon lower body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    monster_body3 = Object(40,7, '*', 'dragon lower body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     fighter_component = Fighter(hp=6, defense=7, power=2, xp=5, death_function=monster_death)
     ai_component = Body(monster_body)
-    monster_tail = Object(40,8, '*', 'dragon tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    monster_tail = Object(40,8, 'v', 'dragon tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     objects.append(monster)
     objects.append(monster_body)
     objects.append(monster_body2)
