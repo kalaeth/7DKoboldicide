@@ -2513,6 +2513,17 @@ def handle_keys():
             if key_char in ['f','F'] or key.vk == libtcod.KEY_KP9:
             	curr_weap = get_equipped_in_slot('right hand')
             	weap_2 = get_equipped_in_slot('left hand')
+            	if curr_weap is not None and curr_weap.owner.name.split(' ')[1] == 'bag' or weap_2 is not None and weap_2.owner.name.split(' ')[1] == 'bag':
+            		orien = player.fighter.orientation
+            		if orien == EAST:
+            			player_move_or_attack(1, 0,False)
+            		elif orien == WEST:
+            			player_move_or_attack(-1, 0,False)
+            		elif orien == NORTH:
+            			player_move_or_attack(0, -1,False)
+            		elif orien == SOUTH:
+            			player_move_or_attack(0, 1,False)
+
             	if weap_2 is not None and weap_2.owner.name.split(' ')[1] not in ['sword','axe','stick']:
             		if weap_2.owner.name.split(' ')[1] in ['sword','axe','stick']:
             			curr_weap = weap_2
