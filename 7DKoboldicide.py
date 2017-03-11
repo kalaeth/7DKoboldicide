@@ -53,7 +53,7 @@ WEST = '<'
 
 
 #health       0     1          2        3       4      5      6
-HEALTH = ['dead','crippled','injured','weak','so-so','ok','good',]
+HEALTH = ['dead','crippled','injured','weak','so-so','ok','good','great']
 #health                        0                  1          2        3              4               5                 6
 HEALTH_COLOR = [libtcod.darker_red, libtcod.dark_red, libtcod.red, libtcod.orange, libtcod.lime,libtcod.chartreuse, libtcod.green, libtcod.white]
 #experience and level-ups
@@ -433,7 +433,7 @@ class Skill:
 class PlayerFighter:
     #combat-related properties and methods (player).
     def __init__(self, hp, defense, power, xp, death_function=None,attack_speed=DEFAULT_ATTACK_SPEED,generation=3):
-        self.base_max_hp = hp
+        self.base_max_hp = 5
         self.hp = hp
         if hp < 7:
             self.color = HEALTH_COLOR[hp]
@@ -664,7 +664,7 @@ class Shopowner:
                 profession = monster.name.split()[0]
                 if profession in ['lumberjack']:
                     slogan = random.choice(['i sell axes','imma lumbjak','nd i\'m ok'])
-                if profession in ['blacksmith']:
+                elif profession in ['blacksmith']:
                     slogan = random.choice(['get metal','metal suits!'])
                 elif profession in ['leathersmith']:
                     slogan = random.choice(['leathers!','all leathers!'])
@@ -681,7 +681,7 @@ class Shopowner:
         #print ai
 
     def sell_stuff(self):
-    	global player
+    	global player, lair_name
     	inv = []
     	shpowner = self.owner
     	if shpowner.name.split()[0] in ['lumberjack']:
@@ -745,8 +745,24 @@ class Shopowner:
                 else:
                     shpowner.fighter.talk(random.choice(['i don\'t work for free', 'and how will you pay?','come back with money!']))		
         elif shpowner.name.split()[0] in ['old','wise']:
-        	shpowner.fighter.talk('go avenge you family')
-        	player.fighter.heal(19)
+            if shpowner.name.split()[0] == 'wise':
+                opt = 0
+                while opt >= 0:
+                    opt = arrow_menu('hello young man. i can tell you about :',['the kobolds','their goal','the world','or you can leave me alone'],30)
+                    if opt == 0:
+                        msgbox('they stink, they are evil and they hurt you. but they are stupid. and each one is very weak.')
+                    elif opt == 1:
+                        msgbox('their queen, the dragon, has been feeding and will soon come out to kill us all. unless someone can get to her, on the deepest caves in {} and kill her.'.format(lair_name))
+                    elif opt == 2:
+                        msgbox('our world has this forest, some woods, a few mounts and the city in the lake where the humans have their shops and.. women.')
+                    else:
+                        shpowner.fighter.talk('go avenge you family')
+                        opt = -1
+            else:
+        	   shpowner.fighter.talk('go avenge you family')
+            if player.fighter.max_hp < 7:
+               player.fighter.base_max_hp += 1
+            player.fighter.heal(19)
         else:
     		shpowner.fighter.talk('can\'t help you, sorry')
 
@@ -910,18 +926,24 @@ class Item:
         	equipment.equip()
         	pick_up = True
         elif equipment:
+            opt_list = []
+            if 'bag' in get_available_slots():
+                opt_list.append('bag it. [{}]'.format(get_equipped_by_name('bag').capacity))
             c_equip_r = get_equipped_in_slot(equipment.slot)
             c_equip_l = get_equipped_in_slot('left hand')
-            opt_list = ['switch with {} on {}'.format(c_equip_r.owner.name,equipment.slot)]
+            opt_list.append('switch with {} on {}'.format(c_equip_r.owner.name,equipment.slot))
             if equipment.slot == 'right hand':
                 if c_equip_l is not None:
                 	opt_list.append('switch with {} on left hand'.format(c_equip_l.owner.name))
             opt_list.append('drop')
             opt = arrow_menu('- {} -'.format(self.owner.name),opt_list,50)
-            if opt == 0:                        		
+            if opt == 0:
+                pick_up = True
+                switch = 'bag'
+            if opt == 1:                        		
             	pick_up = True
             	switch = 'right'
-            if opt == 1 and c_equip_l is not None:
+            if opt == 2 and c_equip_l is not None:
             	pick_up = True
             	switch = 'left'
             elif (opt == 1 and c_equip_l is None) or opt == 2:
@@ -932,10 +954,12 @@ class Item:
         		pick_up = True
         		b = get_equipped_by_name('bag')
         		b.capacity -=1
+        		equipment.slot = 'bag'
         		print 'bag at [] capacity'.format(b.capacity)
         		#not equipment.
         	if 'backpack' in slt:
 	        	pick_up = True
+        		equipment.slot = 'backpack' 	
         		b = player.get_equipped_by_name('backpack')
         		b.capacity -=1
 
@@ -963,6 +987,18 @@ class Item:
         if self.owner.equipment.slot == 'left hand':
         	self.owner.equipment.slot == 'right hand'
  
+ 		if self.owner.name.split()[1] in ['bag','backpack']:
+ 			for equip in get_all_equipped(player):
+ 				if equip.slot in ['bag','backpack']:
+ 					if equip.owner.name.split()[1] in ['sword','axe','stick','boomerang','spear','bag']:
+ 						equip.slot = 'right hand'
+ 					elif equip.owner.name.split()[1] in ['armour']:
+ 						equip.slot = 'body'
+ 					elif equip.owner.name.split()[1] in ['hat']:
+ 						equip.slot = 'head'
+
+
+
         #add to the map and remove from the player's inventory. also, place it at the player's coordinates
         objects.append(self.owner)
         inventory.remove(self.owner)
@@ -1085,6 +1121,7 @@ def pointer_1():
     """
         MAP STUFF
     """
+
 def create_room(room):
     global map
     #go through the tiles in the rectangle and make them passable
@@ -1174,13 +1211,12 @@ def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
     return s_thing
 
 
-
 def make_world_map(grassness=20,start=False):
-    global map, objects, stairs, dung_list
+    global map, objects, stairs, dung_list, lair_name
 
     dung_list = []
     name_list = []
-    for i in range(0,6):
+    for i in range(0,15 ):
     	n =  generateName(4)
     	name_list.append(n)
     print name_list
@@ -1204,7 +1240,11 @@ def make_world_map(grassness=20,start=False):
 
     place_thing(CHAR_MOUNTAIN,8,True,3);
     objects.append(stairs)
-    dung_list.append(Dungeon('dragon\'s spine montain',stairs.x, stairs.y))
+    n = random.choice(name_list)
+    name_list.remove(n)
+    n = '{} montain'.format(n)
+    possible_lairs = [n]
+    dung_list.append(Dungeon(n,stairs.x, stairs.y))
 
     place_thing(CHAR_FOREST,6,True,1);
     objects.append(stairs)
@@ -1219,24 +1259,21 @@ def make_world_map(grassness=20,start=False):
     n += random.choice([' city',' town',' ville'])
     dung_list.append(Dungeon('{} '.format(n),stairs.x, stairs.y))
 
+    for _x in range(2,6):
+        place_thing(CHAR_MOUNTAIN,3,True,3);
+        objects.append(stairs)
+        n = random.choice(name_list)
+        name_list.remove(n)
+        n = 'mount {}'.format(n)
+        possible_lairs.append(n)
+        dung_list.append(Dungeon(n,stairs.x, stairs.y))
 
-    place_thing(CHAR_MOUNTAIN,3,True,3);
-    objects.append(stairs)
-    n = random.choice(name_list)
-    name_list.remove(n)
-    dung_list.append(Dungeon('mount {}'.format(n),stairs.x, stairs.y))
-
-    place_thing(CHAR_MOUNTAIN,4,True,3);
-    objects.append(stairs)
-    n = random.choice(name_list)
-    name_list.remove(n)
-    dung_list.append(Dungeon('mount {}'.format(n),stairs.x, stairs.y))
-
-    place_thing(CHAR_FOREST,3,True,1);
-    objects.append(stairs)
-    n = random.choice(name_list)
-    name_list.remove(n)
-    dung_list.append(Dungeon('{} woods'.format(n),stairs.x, stairs.y))
+    for _x in range(1,3):
+        place_thing(CHAR_FOREST,3,True,1);
+        objects.append(stairs)
+        n = random.choice(name_list)
+        name_list.remove(n)
+        dung_list.append(Dungeon('{} woods'.format(n),stairs.x, stairs.y))
 
     
     c = place_thing(CHAR_DIRT,7, False, 6);
@@ -1251,6 +1288,8 @@ def make_world_map(grassness=20,start=False):
     	map[player.x-1][player.y-4] = Tile(True,terrain='-')
     	map[player.x-2][player.y-4] = Tile(True,terrain='-')
     	map[player.x-3][player.y-4] = Tile(True,terrain='-')
+
+    lair_name = random.choice(possible_lairs)
 
 
 
@@ -2451,6 +2490,9 @@ def menu(header, options, width,offset=0):
  
     #print the header, with auto-wrap
     libtcod.console_set_default_foreground(window, libtcod.white)
+    libtcod.console_set_default_background(window, libtcod.black)
+
+    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_SET, libtcod.LEFT, header)
     libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
  
     #print all the options
@@ -2500,7 +2542,7 @@ def inventory_menu(header):
     return inventory[index].item
  
 def msgbox(text, width=50):
-    menu(text, [], width)  #use menu() as a sort of "message box"
+    menu(text, [], width,offset=-3)  #use menu() as a sort of "message box"
  
 def handle_keys():
     global key,isRealTime, mouse, oldxx,oldyy,oldPxx,oldPyy,notifications, inventory
@@ -2553,9 +2595,17 @@ def handle_keys():
                                         t = map[x][y].terrain
                                         break     
                             if map[player.x][player.y].terrain == '>':
-                            	next_level(dungeon_level,up=True,name=get_dungeon_name(player.x,player.y))
+                            	if dungeon_level > 0:
+                            		nm = dungeon_name
+                            	else:
+                            		nm = get_dungeon_name(player.x,player.y)
+                            	next_level(dungeon_level,up=True,name=nm)
                             else:
-                            	next_level(dungeon_level,t,up=False,name=get_dungeon_name(player.x,player.y))
+                            	if dungeon_level > 0:
+                            		nm = dungeon_name
+                            	else:
+                            		nm = get_dungeon_name(player.x,player.y)
+                            	next_level(dungeon_level,t,up=False,name=nm)
                             	key.vk == libtcod.KEY_KP5
                             break
                     elif object.x == _x and object.y == _y:
@@ -2572,7 +2622,7 @@ def handle_keys():
                             objects.remove(object)
             if key_char in ['c','C'] or key.vk == libtcod.KEY_KP3:
                 opt = 5
-                while opt > 0:
+                while opt >= 0:
                     opt = arrow_menu('--game menu--',['inventory','drop stuff','char info','back to game','quit'],15,0,-1,-3)
                     if opt == 0:
                         chosen_item = inventory_menu('use / equip \n select with action, cancel with menu.\n')
@@ -2610,6 +2660,7 @@ def handle_keys():
                         chosen_item = inventory_menu('drop \n select with action, cancel with menu.\n')
                         if chosen_item is not None:
                             chosen_item.drop()
+                            continue
                     elif opt == 2:
                         level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
                         _sk_ = ''
@@ -2621,8 +2672,11 @@ def handle_keys():
                     elif opt == 3:
                         return 'nop'
                     elif opt == 4:
-                        opt = -1
-                        return 'exit'
+                        if arrow_menu('really quit?',['YES','nah'],15,30,14) == 0:
+                            opt = -1
+                            return 'exit'
+                        else:
+                            continue
             if key_char in ['q','Q'] or key.vk == libtcod.KEY_KP1:
             	curr_weap = get_equipped_in_slot('right hand')
             	weap_2 = get_equipped_in_slot('left hand')
@@ -2981,7 +3035,7 @@ def closest_monster(max_range):
 
 def save_floor(floorname='world'):
 
-
+    print "saving [{}]".format(floorname)    
 
     file = shelve.open(floorname, 'n')
     file['map'] = map
@@ -3060,7 +3114,7 @@ def new_game():
     global player, inventory, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects, notifications
  
     #create object representing the player
-    fighter_component = PlayerFighter(hp=6, defense=5, power=2, xp=0, death_function=player_death)
+    fighter_component = PlayerFighter(hp=5, defense=5, power=2, xp=0, death_function=player_death)
     player = Object(0, 0, '@', 'koboldicider', libtcod.white, blocks=True, fighter=fighter_component)
     
     player.level = 1
@@ -3090,10 +3144,13 @@ def new_game():
     notifications.append(Notif('nham, tasty dog!',5,player.x+1,player.y+4))
 
     message('As you return from you errands, you find your house burning and a kobold eating your dog')
+    message('the wise man in the forest will know what to do.')
+    message('but first..')
  
 def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world'):
-    global dungeon_level
+    global dungeon_level, dungeon_name
     #advance to the next level
+    dungeon_name = name
     objects.remove(player)
     if not up:
     	print "going down! dl[{}] in [{}]".format(dungeon_level,name)
@@ -3130,13 +3187,13 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world'):
     	print "going up! dl[{}]".format(dungeon_level)
 
         if dl == 1:
+            save_floor('{}_{}F.dng'.format(name,1))
             load_floor('world.dng')
-            save_floor('{}_{}F.dng'.format(name,dungeon_level))
             initialize_fov()
             dungeon_level = 0
         else:
-            dungeon_level -= 1
             load_floor('{}_{}F.dng'.format(name,dungeon_level))
+            dungeon_level -= 1
             initialize_fov()
     save_game()
 
@@ -3258,16 +3315,19 @@ def swing_sword(_x,_y):
 
 
 def main_menu():
-    libtcod.console_clear(con)
-    #img = libtcod.image_load('menu_background.png')
+    libtcod.console_flush()
+    libtcod.console_set_default_background(0, libtcod.black)
+    libtcod.console_clear(0)
+
+    img = libtcod.image_load('menu_background.png')
     libtcod.console_map_ascii_code_to_font('@', 2, 0)
     libtcod.console_map_ascii_code_to_font('O', 1, 0)
     #libtcod.console_map_ascii_code_to_font('+', 3, 0)
     libtcod.console_map_ascii_code_to_font('T', 6, 0)
 
+    libtcod.image_blit_2x(img, 0, 0, 0)
     while not libtcod.console_is_window_closed():
         #show the background image, at twice the regular console resolution
-        #libtcod.image_blit_2x(img, 0, 0, 0)
  
         #show the game's title, and some credits!
         libtcod.console_set_default_foreground(0, libtcod.white)
@@ -3276,22 +3336,23 @@ def main_menu():
         #_continue = arrow_menu('continue ?',['   yes','    no'],12,0,12,12)
         #choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 25,10)
         libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_NONE, libtcod.RIGHT, '7DKoboldicider <--------')       	
-        choice = arrow_menu('welcome, koboldicider',['into the game!', 'please help?', 'i wanna quit.'],40,0,3,20)
+        choice = arrow_menu('welcome, koboldicider',['into the game!', 'please help?', 'i wanna quit.'],40,0,20,15)
 
  
         if choice == 0:  #new game
             new_game()
             play_game()
         if choice == 1:  #show help screen
-            libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_NONE, libtcod.RIGHT, '7DKoboldicider <--------')       	
+            libtcod.console_set_default_background(0, libtcod.black)
 
-            libtcod.console_print_ex(0, 60, 12, libtcod.BKGND_NONE, libtcod.RIGHT, 'move with [w,a,s,d] or kp[8,4,6,2] or [arrow keys]')       	
-            libtcod.console_print_ex(0, 60, 13, libtcod.BKGND_NONE, libtcod.RIGHT, 'attack the square you are facing        [f or kp9]')       	
-            libtcod.console_print_ex(0, 60, 14, libtcod.BKGND_NONE, libtcod.RIGHT, 'use, pick up, talk, go up/down          [e or kp7]')       	
-            libtcod.console_print_ex(0, 60, 15, libtcod.BKGND_NONE, libtcod.RIGHT, 'throw a stick, spear or boomerang       [q or kp1]')       	
-            libtcod.console_print_ex(0, 60, 16, libtcod.BKGND_NONE, libtcod.RIGHT, 'open in-game menu                       [c or kp3]')       	
-            libtcod.console_print_ex(0, 60, 17, libtcod.BKGND_NONE, libtcod.RIGHT, 'wait a turn                         [space or kp5]')       	
-            libtcod.console_print_ex(0, 60, 18, libtcod.BKGND_NONE, libtcod.RIGHT, '                     ----')       	
+            libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_SET, libtcod.RIGHT, '7DKoboldicider <--------')           
+            libtcod.console_print_ex(0, 60, 12, libtcod.BKGND_SET, libtcod.RIGHT, 'move with [w,a,s,d] or kp[8,4,6,2] or [arrow keys]')       	
+            libtcod.console_print_ex(0, 60, 13, libtcod.BKGND_SET, libtcod.RIGHT, 'attack the square you are facing        [f or kp9]')       	
+            libtcod.console_print_ex(0, 60, 14, libtcod.BKGND_SET, libtcod.RIGHT, 'use, pick up, talk, go up/down          [e or kp7]')       	
+            libtcod.console_print_ex(0, 60, 15, libtcod.BKGND_SET, libtcod.RIGHT, 'throw a stick, spear or boomerang       [q or kp1]')       	
+            libtcod.console_print_ex(0, 60, 16, libtcod.BKGND_SET, libtcod.RIGHT, 'open in-game menu                       [c or kp3]')       	
+            libtcod.console_print_ex(0, 60, 17, libtcod.BKGND_SET, libtcod.RIGHT, 'wait a turn                         [space or kp5]')       	
+            libtcod.console_print_ex(0, 60, 18, libtcod.BKGND_SET, libtcod.RIGHT, '                     ----')       	
         elif choice == 2:  #quit
             break
  
