@@ -958,29 +958,29 @@ class Item:
 
                 	
             opt = arrow_menu('- {} -'.format(self.owner.name),opt_list,50)
-            print 'opt : {}'.format(opt)
+            #print 'opt : {}'.format(opt)
             if opt == 0:
-                print 'DROP TH BEAT!'
+                #print 'DROP TH BEAT!'
                 pick_up = False
                 switch = 'drop'
             elif opts == 1 and opt == 1:
-                print 'switching!'
+                #print 'switching!'
                 pick_up = True
                 switch = equipment.slot
             elif opt == 1+opts:                        		
-                print 'equip in R'
+                #print 'equip in R'
             	pick_up = True
                 if c_equip_r is not None:
             	   switch = 'right'
             elif opt == 2+opts:
-                print 'equip in L'
+                #print 'equip in L'
             	pick_up = True
                 if c_equip_l is not None:
             	   switch = 'left'
             else:
                 pick_up = True
                 switch = 'bag {}'.format(opt_list[opt].split(' ')[3])
-                print 'bag me @[{}] and call me a pretzel'.format(switch)
+                #print 'bag me @[{}] and call me a pretzel'.format(switch)
 
         if pick_up:
             #add to the player's inventory and remove from the map
@@ -1809,13 +1809,13 @@ def place_objects(room):
     #print dungeon_name
     if dungeon_name.split()[1] in ['woods']:
         items.append('bag')
-        print 'bag is here'
+        #print 'bag is here'
     #item_chances['backpack'] = 35  
     if dungeon_name not in lair_name and dungeon_level > 2:
         items.append('wooden boomerang')
         items.append('long sword')
         items.append('metal armour')
-        print 'wooden boomerang, long sword  metal armour is here'
+        #print 'wooden boomerang, long sword  metal armour is here'
         
  
     #choose random number of monsters
@@ -2941,10 +2941,8 @@ def in_game_menu():
             else:
                 continue
 
-def player_death(player):
-    #the game ended!
-    global game_state
-    message('You died!', libtcod.red)
+
+def end_screen(player):
     death_msg = 'good bye, koboldicider. you killed [{}] kobolds, '.format(kobolds_killed)
     death_msg += 'had [{}] money and had equiped '.format(player.fighter.purse)
     rhand = get_equipped_in_slot('right hand')
@@ -2971,6 +2969,12 @@ def player_death(player):
     msgbox(death_msg)
     print ' [{}]'.format(death_msg)
 
+
+def player_death(player):
+    #the game ended!
+    global game_state
+    message('You died!', libtcod.red)
+    end_screen(player)
     msgbox(' game over ')
     game_state = 'dead'
     #for added effect, transform the player into a corpse!
@@ -3300,6 +3304,7 @@ def play_game():
         #handle keys and exit game if needed
         player_action = handle_keys()
         if player_action == 'exit':
+            end_screen(player)
             save_game()
             return;
 
