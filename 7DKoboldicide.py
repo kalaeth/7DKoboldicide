@@ -1009,13 +1009,16 @@ class Item:
         if self.owner.equipment:
             self.owner.equipment.dequip()
 
-        if self.owner.equipment.slot == 'left hand':
-        	self.owner.equipment.slot == 'right hand'
+        self.owner.equipment.slot == self.owner.equipment.old_slot
  
- 		if self.owner.name.split()[0] in ['bag','backpack']:
- 			for equip in get_all_equipped(player):
- 				if equip.slot in ['bag 0','bag 1','bag 2','backpack']:
- 					equip.slot = equipment.old_slot
+        if self.owner.name.split()[1] in ['bag','backpack']:
+            for obj in inventory:
+                if obj.equipment:
+                    print 'droppping stuff! [' + obj.equipment.slot +"]"
+                    if obj.equipment.slot in ['bag 0','bag 1','bag 2','backpack']:
+                        obj.item.drop()
+                        print 'dropped {}'.format(obj.name)
+
 
 
 
@@ -1093,7 +1096,7 @@ def get_available_slots():
     slots = ['right hand','left hand','head','body','back','neck']
     for obj in inventory:
         if obj.equipment and obj.equipment.is_equipped:
-        	if obj.name.split()[1] in ['backpack','bag']:
+        	if obj.name.split()[1] in ['backpack','bag'] or obj.name.split()[0] in ['bag']:
         		for i in range(0, obj.equipment.capacity):
         			slots.append('{} {}'.format(obj.name.split()[1],i))
         	slots.remove(obj.equipment.slot)
@@ -1456,7 +1459,7 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
                 num_rooms += 1
     
     if place_sage:
-    	_r_  = rooms[random.randint(2,num_rooms)]
+    	_r_  = rooms[random.randint(2,num_rooms-1)]
         place_homes(_r_,[sage_type])
  
     #create stairs at the center of the last room
@@ -2815,7 +2818,7 @@ def handle_keys():
             		elif orien == SOUTH:
             			if player_move_or_attack(0, 1,False):
             			    message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
-            	if curr_weap is None and weap_2 is not None and curr.owner.name.split(' ')[1] not in ['sword','axe','stick']:
+            	if curr_weap is None and weap_2 is not None or (curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in ['sword','axe','stick'] and weap_2 is not None): 
             		if weap_2.owner.name.split(' ')[1] in ['sword','axe','stick']:
             			curr_weap = weap_2
             	if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['sword','axe','stick']:
@@ -2996,7 +2999,7 @@ def dragon_death(monster):
     msgbox("you have become kobolicider, destroyer of kobolds.")
     msgbox(' you killed [{}] kobolds!'.format(kobolds_killed))
 
-    main_menu()
+    return 'exit'
 
 
 def monster_death(monster):
