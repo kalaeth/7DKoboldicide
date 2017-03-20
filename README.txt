@@ -28,6 +28,16 @@
 	 	-> back to game : you could also press 'c' or keypad 3 or ESC or 'q' or keypad 9 to return to game.
 	 	-> go back to the main menu. That kills the current game! Maybe I should add a confirmation.. [edit:done]
 
+
+If you can, I recommend setting up a gamepad with the following mapping: 
+ -> directions to the arrow keys
+ -> button 1 for 'f' (fight) 
+ -> button 2 for 'e' (action)
+ -> button 3 for 'q' (quiver)
+ -> button 4 for 'c' (menu)
+
+
+
 licences and legal stuffs!
 
 for now:
