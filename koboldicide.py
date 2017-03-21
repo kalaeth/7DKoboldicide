@@ -3015,7 +3015,7 @@ def end_screen(player):
     body = get_equipped_in_slot('body')
     
     title = ''
-    equip = ''
+    equip = 'nothing'
     if body is not None and body.owner.name == 'metal armour' and head is not None and head.owner.name == 'metal elm':
         title = 'iron-man'
     if body is None and head is None:
@@ -3026,14 +3026,16 @@ def end_screen(player):
         title = 'hawai\ʻi maoli'
     elif body is not None and body.owner.name == 'hawaiian shirt' and (rhand is not None and rhand.owner.name == 'pocket knife' or lhand is not None and lhand.owner.name == 'pocket knife':
         title = 'macgyver'
-    elif body is not None and body.owner.name == 'leather armour' and head is not None and head.owner.name == 'leather hat' and (rhand is not None and rhand.owner.name == 'leather whip' or lhand is not None and lhand.owner.name == 'leather whip':
+        equip = 'a paper clip'
+    elif body is not None and body.owner.name == 'leather armour' and head is not None and head.owner.name == 'leather hat' and (rhand is not None and rhand.owner.name == 'leather whip' or lhand is not None and lhand.owner.name == 'leather whip'):
         title = 'kinky'
-    elif head is not None and head.owner.name == 'cowboy hat' and (rhand is not None and rhand.owner.name == 'leather whip' or lhand is not None and lhand.owner.name == 'leather whip':
+    elif head is not None and head.owner.name == 'cowboy hat' and (rhand is not None and rhand.owner.name == 'leather whip' or lhand is not None and lhand.owner.name == 'leather whip'):
         title = 'indiana jones'
     elif head is not None and head.owner.name == 'bandanna hat' and (rhand is not None and rhand.owner.name.split()[1] == 'knife' or lhand is not None and lhand.owner.name.split()[1] == 'knife') and body is not None and body.owner.name == 'sleeveless shirt':
         title = 'rambo'
+        equip = 'bad-assery'
 
-    if (rhand is not None and rhand.owner.name.split()[1] == 'stone' and lhand is not None and lhand.owner.name.split()[1] == 'stick') or (rhand is not None and rhand.owner.name.split()[1] == 'stick' and lhand is not None and lhand.owner.name.split()[1] == 'stone'):
+    if (rhand is not None and rhand.owner.name.split()[1] == 'stone' and lhand is not None and lhand.owner.name.split()[1] == 'stick') or (rhand is not None and rhand.owner.name.split()[1] =='stick' and lhand is not None and lhand.owner.name.split()[1] == 'stone'):
         equip = 'sticks & stones'
         if title != '':
             title += ', bone breaker'
@@ -3044,21 +3046,23 @@ def end_screen(player):
 
 
     death_msg = 'good bye, {}, the koboldicider. you killed [{}] kobolds, '.format(title,kobolds_killed)
-    death_msg += 'had [{}] money and had {} equipped.'.format(player.fighter.purse, equip)
-#    if rhand is not None:
-#        death_msg += 'on your right hand [{}],'.format(rhand.owner.name)
-#    if lhand is not None:
-#        death_msg += '\n on your left hand [{}],'.format(lhand.owner.name)
-#    if head is not None:
-#        death_msg += 'on your head [{}],'.format(head.owner.name)
-#    if neck is not None:
-#        death_msg += 'on your neck [{}],'.format(neck.owner.name)
-#    if body is not None:
-#        death_msg += 'on your body [{}],'.format(body.owner.name)
+    if equip == 'nothing':
+        equip = ''
+        if rhand is not None:
+            equip += 'on your right hand [{}],'.format(rhand.owner.name)
+        if lhand is not None:
+            equip += '\n on your left hand [{}],'.format(lhand.owner.name)
+        if head is not None:
+            equip += 'on your head [{}],'.format(head.owner.name)
+        if neck is not None:
+            equip += 'on your neck [{}],'.format(neck.owner.name)
+        if body is not None:
+            equip += 'on your body [{}],'.format(body.owner.name)
 #    if rhand is None and lhand is None and head is None and body is None and neck is None:
 #        death_msg += 'nothing but vengeance on your soul.'
 #    else:
 #        death_msg += 'and nothing but vengeance on your soul.'
+    death_msg += 'had [{}] money and had {} equipped.'.format(player.fighter.purse, equip)
     message(death_msg)
     render_all()
     msgbox(death_msg)
