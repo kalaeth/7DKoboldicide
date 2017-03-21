@@ -1,6 +1,8 @@
 #!/usr/bin/python
 #
-# libtcod python tutorial
+# Koboldicider by Kalaeth
+# started: March 5, 17h00
+# with special thanks to Jotaf for his tutorial
 #
  
 import libtcodpy as libtcod
@@ -8,10 +10,12 @@ import math
 import textwrap
 import shelve
 import random
+import os
+import shutil
 from time import sleep
- 
+
 #actual size of the window
-SCREEN_WIDTH = 60
+SCREEN_WIDTH = 62
 SCREEN_HEIGHT = 30
  
 #size of the map
@@ -22,17 +26,17 @@ VIEW_HEIGHT = 16
 CAMERA_WIDTH = 50
 CAMERA_HEIGHT = 22
 MAP_WIDTH = 100
-MAP_HEIGHT = 50
+MAP_HEIGHT = 80
 DEPTH = 10
 MIN_SIZE = 15
 FULL_ROOMS = False
  
 #sizes and coordinates relevant for the GUI
-BAR_WIDTH = 11
-PANEL_HEIGHT = 8
+BAR_WIDTH = 10
+PANEL_HEIGHT = 6
 PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
-MSG_X = BAR_WIDTH + 2
-MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 1
+MSG_X = 1
+MSG_WIDTH = SCREEN_WIDTH  - 2
 MSG_HEIGHT = PANEL_HEIGHT - 2
 INVENTORY_WIDTH = 50
 CHARACTER_SCREEN_WIDTH = 30
@@ -49,7 +53,11 @@ SOUTH = 'v'
 EAST = '>'
 WEST = '<'
 
- 
+
+#health       0     1          2        3       4      5      6
+HEALTH = ['dead','crippled','injured','weak','so-so','ok','good','great']
+#health                        0                  1          2        3              4               5                 6
+HEALTH_COLOR = [libtcod.darker_red, libtcod.dark_red, libtcod.red, libtcod.orange, libtcod.lime,libtcod.chartreuse, libtcod.green, libtcod.white]
 #experience and level-ups
 LEVEL_UP_BASE = 200
 LEVEL_UP_FACTOR = 150
@@ -61,7 +69,7 @@ DEFAULT_ATTACK_SPEED = 1
  
 FOV_ALGO = 1  #default FOV algorithm
 FOV_LIGHT_WALLS = True  #light walls or not
-TORCH_RADIUS = 80
+TORCH_RADIUS = 10
  
 LIMIT_FPS = 20  #20 frames-per-second maximum
  
@@ -83,12 +91,28 @@ CHAR_ROAD = '_'
 CHAR_FOREST = 'T'
 CHAR_LAKE = '~'
 CHAR_MOUNTAIN = '#'
-CHAR_STAIRS = '>'
+CHAR_STAIRS = '<'
+CHAR_DOOR = ']'
+CHAR_SAND = '¨'
+
+class Dungeon:
+    def __init__(self,name,x,y):
+        self.name = name
+        self.x = x
+        self.y = y
+
+def get_dungeon_name(x,y):
+    global dung_list
+
+    for d in dung_list:
+        if d.x == x and d.y == y:
+            return d.name
+
 
 class Dialog:
-    def __init__(self,_char,_level,_value):
-        self.characther = _char
-        self.level = _level
+    def __init__(self,_char,_state,_value):
+        self.character = _char
+        self.state = _state
         self.value = _value
 
     def _set_value(self, _value):
@@ -101,17 +125,15 @@ class Dialogs:
     def __init__(self):
         self.list = [];
 
-    def get(self,_char, _level):
-        rt_sentence = Dialog('X',0,'Leave me alone!')
+    def get(self,_char, _state):
+        rt_sentence = Dialog('X','neutral','*grumpf*')
         for sentence in self.list:
-            if sentence.character == _char and sentence.level == _level:
+            if sentence.character == _char and sentence.state == _state:
                 return sentence
-            elif sentence.characther == _char and sentence.level > _level:
-                rt_sentence = sentence 
         return rt_sentence
 
-    def getValue(self,_char, _level):
-        return self.get(_char,_level)._get_value()
+    def getValue(self,_char, _state):
+        return self.get(_char,_state)._get_value()
 
     def loadFromFile(self):
         _dialogs_ = []
@@ -124,11 +146,12 @@ class Dialogs:
                         break
 
         for _d in _dialogs_:
-                dd = _d.split(' ')
+                dd = _d.split(':')
                 if dd[0] == 'END':
                     break
                 else:
-                    self.addSetting(dd[0],dd[1],dd[2]);
+                    #print dd[0] +':'+ dd[1] +':'+ dd[2]
+                    self.list.append(Dialog(dd[0],dd[1],dd[2]));
  
 class Tile:
     #a tile of the map and its properties
@@ -142,17 +165,20 @@ class Tile:
 
         self.terrain = terrain
         if self.terrain in [CHAR_LAKE,CHAR_FOREST,CHAR_MOUNTAIN]:
-        	self.blocked = True
-        	self.block_sight = False
+            self.blocked = True
+            if self.terrain in [CHAR_FOREST, CHAR_MOUNTAIN]:
+                self.block_sight = True
+            else:
+               self.block_sight = False
         elif self.terrain in [CHAR_DIRT, CHAR_GRASS, CHAR_ROAD , CHAR_LONG_GRASS, CHAR_STAIRS]:
-        	self.blocked = False
-        	self.block_sight = False
-        elif self.terrain in [CHAR_TALL_GRASS]:
-        	self.blocked = False
-        	self.block_sight = True
+            self.blocked = False
+            self.block_sight = False
+        elif self.terrain in [CHAR_TALL_GRASS,CHAR_DOOR]:
+            self.blocked = False
+            self.block_sight = True
         else:
-	        if block_sight is None: block_sight = blocked
-	        self.block_sight = block_sight
+            if block_sight is None: block_sight = blocked
+            self.block_sight = block_sight
 
         self.color = libtcod.green
         if self.terrain == CHAR_MOUNTAIN or self.terrain == CHAR_DIRT:
@@ -160,26 +186,28 @@ class Tile:
         elif self.terrain == CHAR_LAKE:
             self.color = libtcod.blue
             self.block_sight = False
-        elif self.terrain == CHAR_STAIRS:
+        elif self.terrain in [CHAR_STAIRS, CHAR_SAND]:
             self.color = libtcod.light_yellow
         elif self.terrain == CHAR_TALL_GRASS:
-        	self.color = libtcod.darker_green
-        elif self.terrain == CHAR_LONG_GRASS:
+            self.color = libtcod.darker_green
+        elif self.terrain in [CHAR_LONG_GRASS,CHAR_FOREST]:
             self.color = libtcod.dark_green
-
         elif self.terrain == CHAR_GRASS:
-        	self.color = libtcod.green
+            self.color = libtcod.green
+        elif self.terrain in ['-','_','|','[',']']:
+            self.color = libtcod.dark_sepia
+        elif self.terrain in ['X']:
+            self.color = libtcod.light_flame
 
     def _toString(self):
         return '{},{}'.format(self.terrain, self.color)
 
 class Notif:
-    
     #Notifation(x,y,time_to_live)
     def __init__(self,message,time_to_live = 50, x = 20, y = 10, color=libtcod.light_yellow):
         self.x = x
         self.message = message
-        self.color= libtcod.light_yellow
+        self.color= color
         self.y = y
         self.time_to_live = time_to_live
 
@@ -197,13 +225,30 @@ class Notif:
             if x is not None:
                 #set the color and then draw the character that represents this object at its position
                 libtcod.console_set_default_foreground(con, self.color)
-                libtcod.console_print_ex(con, x, y, libtcod.BKGND_SCREEN,  libtcod.LEFT,self.message)
+                libtcod.console_set_default_background(con, libtcod.black)
+                libtcod.console_print_ex(con, x, y, libtcod.BKGND_SET,  libtcod.LEFT,self.message)
 
     def wipe(self,con):
         #erase the character that represents this object
         (x, y) = to_camera_coordinates(self.x, self.y)
         if x is not None:
-            libtcod.console_put_char(con, x, y, ' ', libtcod.BKGND_NONE)
+            if len(self.message) > 1:
+                xoff = self.x
+                for _x in range(x, x+len(self.message)):
+                    if xoff >= MAP_WIDTH:
+                       break
+                    t = map[xoff][self.y].terrain
+                    c = map[xoff][self.y].color
+                    libtcod.console_set_default_foreground(con, c)
+                
+                    libtcod.console_put_char(con, _x, y, t, libtcod.BKGND_NONE)
+                    xoff+=1
+                render_all()
+            else:
+                t = map[self.x][self.y].terrain
+                c = map[self.x][self.y].color
+                libtcod.console_set_default_foreground(con, c)
+                libtcod.console_put_char(con, x, y, t, libtcod.BKGND_NONE)
 
 class Rect:
     #a rectangle on the map. used to characterize a room.
@@ -239,23 +284,23 @@ class Object:
         self.fighter = fighter
         if self.fighter:  #let the fighter component know who owns it
             self.fighter.owner = self
- 
+
         self.ai = ai
         if self.ai:  #let the AI component know who owns it
             self.ai.owner = self
- 
+
         self.item = item
         if self.item:  #let the Item component know who owns it
             self.item.owner = self
- 
+
         self.equipment = equipment
         if self.equipment:  #let the Equipment component know who owns it
             self.equipment.owner = self
- 
+
             #there must be an Item component for the Equipment component to work properly
             self.item = Item()
             self.item.owner = self
- 
+
     def move(self, dx, dy):
         #move by the given amount, if the destination is not blocked
         if self.x + dx > MAP_WIDTH:
@@ -360,36 +405,74 @@ class Object:
  
             if x is not None:
                 #set the color and then draw the character that represents this object at its position
-                libtcod.console_set_default_foreground(con, self.color)
+                if self.fighter:
+                    _color_ = self.fighter.color
+                else:
+                    _color_ = self.color
+                libtcod.console_set_default_foreground(con, _color_)
                 libtcod.console_put_char(con, x, y, self.char, libtcod.BKGND_NONE)
  
     def clear(self):
         #erase the character that represents this object
         (x, y) = to_camera_coordinates(self.x, self.y)
         if x is not None:
-            libtcod.console_put_char(con, x, y, ' ', libtcod.BKGND_NONE)
+            t = map[self.x][self.y].terrain
+            c = map[self.x][self.y].color
+            libtcod.console_set_default_foreground(con, c)
+            libtcod.console_put_char(con, x, y, t, libtcod.BKGND_NONE)
+
+class Skill:
+    def __init__(self,name,power=0,precedence=None):
+        self.name = name
+        self.power = power
+        self.precedence = precedence
+
+    def toString(self):
+        st = ' {} '.format(self.name)
+        if not self.precedence is None:
+            st += self.precedence.toString()
+            st += ' -> '
+        #st += self.name
+        return st
 
 class PlayerFighter:
     #combat-related properties and methods (player).
     def __init__(self, hp, defense, power, xp, death_function=None,attack_speed=DEFAULT_ATTACK_SPEED,generation=3):
-        self.base_max_hp = hp
+        self.base_max_hp = 5
         self.hp = hp
+        if hp < 7:
+            self.color = HEALTH_COLOR[hp]
+        else:
+            self.color = libtcod.white
         self.base_defense = defense
         self.base_power = power
         self.xp = xp
         self.death_function = death_function
-        self.ce_charge = 0
+        
         self.attack_speed = attack_speed
-        self.current_weapon = 0
-        self.ammo = [20,0,0,0,0]
-        self.generation = 3
+        
         self.orientation = SOUTH
-        self.purse = random.randint(0,50)
+        self.purse = random.randint(25,35)
+        
+        #skl = random.randint(0,6)
+        #if skl < 3:
+        #s = Skill('sword',1)
+        #else:
+        #s = Skill('spear',1)
+        
+
+        self.skills = []
+        #kl = random.randint(0,6)
+        #elf.skills.append(s)
+        #if skl > 3:
+        #s2 = Skill('long',2,s)
+        #self.skills.append(s2)
 
  
     @property
     def power(self):  #return actual power, by summing up the bonuses from all equipped items
         bonus = sum(equipment.power_bonus for equipment in get_all_equipped(self.owner))
+        
         return self.base_power + bonus
  
     @property
@@ -412,8 +495,6 @@ class PlayerFighter:
         elif self.orientation == WEST:
             return player.x - 1, player.y
 
-
- 
     def attack(self, target):
         #a simple formula for attack damage
         #roll power d10
@@ -423,7 +504,7 @@ class PlayerFighter:
             rolls.append(random.randint(1,10))
         roll_history = ""
         for roll in rolls:
-            roll_history += '[{}]'.format(roll)
+            roll_history += '[{}] '.format(roll)
             if roll == 10:
                 hits+=2
             elif roll > target.fighter.defense:
@@ -446,7 +527,14 @@ class PlayerFighter:
         #apply damage if possible
         if damage > 0:
             self.hp -= damage
- 
+            if self.hp < 0:
+                self.hp = 0
+            elif self.hp < 7:
+                self.color = HEALTH_COLOR[self.hp]
+            else:
+                self.color = libtcod.white
+
+            
             #check for death. if there's a death function, call it
             if self.hp <= 0:
                 function = self.death_function
@@ -459,122 +547,14 @@ class PlayerFighter:
     def heal(self, amount):
         #heal by the given amount, without going over the maximum
         self.hp += amount
-        if self.hp > self.max_hp:
-            self.hp = self.max_hp
-					
-    def degenerate(self):
-		self.generation += 1
-		
-		#pick a degeneration_seed:
-		if self.generation > 50:
-			dgn_chance = 100
-		else:
-			dgn_chance = libtcod.random_get_int(0,self.generation*2,100)
-		
-		#if chance > 1d100, degenerates. else nothing.
-		if dgn_chance >= libtcod.random_get_int(0,0,100):
-			degen_type = libtcod.random_get_int(0,0,100)
-			#really bad 5%
-			if degen_type < 5:
-				msgbox('you are horribly deformed!')
-			#bad 15%
-			elif degen_type < 20:
-				msgbox('you are a bit deformed!')
-			#somewhat bad 60%
-			elif degen_type < 70:
-				msgbox('you are a sligthly deformed!')
-			#useless 20%
-			elif degen_type < 90:
-				msgbox('you are a ugly as fuck')
-			#good 7%
-			elif degen_type < 97:
-				msgbox('Not all mutations are bad! ')
-			#really good 3%
-			else:
-				msgbox('fuck yeah, tentacles!! ')
-		else:
-			msgbox('a perfect clone you are!')
-
-class Fighter:
-    #combat-related properties and methods (monster, player, NPC).
-    def __init__(self, hp, defense, power, xp, death_function=None,attack_speed=DEFAULT_ATTACK_SPEED):
-        self.base_max_hp = hp
-        self.hp = hp
-        self.base_defense = defense
-        self.base_power = power
-        self.xp = xp
-        self.death_function = death_function
-        self.ce_charge = 0
-        self.current_weapon = 0
-        self.attack_speed = attack_speed
-        self.ammo = [100]
-        self.purse = 0
- 
-    @property
-    def power(self):  #return actual power, by summing up the bonuses from all equipped items
-        bonus = sum(equipment.power_bonus for equipment in get_all_equipped(self.owner))
-        return self.base_power + bonus
- 
-    @property
-    def defense(self):  #return actual defense, by summing up the bonuses from all equipped items
-        bonus = sum(equipment.defense_bonus for equipment in get_all_equipped(self.owner))
-        return self.base_defense + bonus
- 
-    @property
-    def max_hp(self):  #return actual max_hp, by summing up the bonuses from all equipped items
-        bonus = sum(equipment.max_hp_bonus for equipment in get_all_equipped(self.owner))
-        return self.base_max_hp + bonus
- 
-    def attack(self, target):
-        #a simple formula for attack damage
-        #roll power d10
-        rolls = [random.randint(1,10)]
-        hits = 0
-        for i in range(0,self.power):
-            rolls.append(random.randint(1,10))
-        roll_history = ""
-        for roll in rolls:
-            roll_history += '[{}]'.format(roll)
-            if roll == 10:
-                hits+=1
-            elif roll > target.fighter.defense:
-                hits+=1
-            elif roll == 1:
-                hits-=1
-
-        
-        damage = hits
-        self.owner.wait = self.attack_speed
-        if damage > 0:
-            #make the target take some damage
-            message(self.owner.name + ' hits ' + target.name + ' with ' + str(damage) + ' dmg. ' + "{}".format(roll_history))
-            target.fighter.take_damage(damage)
+        if self.hp > 7:
+            self.color = libtcod.white
         else:
-            message(self.owner.name + ' misses ' + target.name+ ". " + "{}".format(roll_history))
- 
-    def take_damage(self, damage):
-        #apply damage if possible
-        if damage > 0:
-            self.hp -= damage
- 
-            #check for death. if there's a death function, call it
-            if self.hp <= 0:
-                function = self.death_function
-                if function is not None:
-                    function(self.owner)
- 
-                if self.owner != player:  #yield experience to the player
-                    player.fighter.xp += self.xp
- 
-    def heal(self, amount):
-        #heal by the given amount, without going over the maximum
-        self.hp += amount
+            self.color = HEALTH_COLOR[self.hp]
         if self.hp > self.max_hp:
             self.hp = self.max_hp
-
-    def talk(self,text):
-        notifications.append(Notif(text,5,self.owner.x,self.owner.y-1))
-
+                    
+# AI 
 
 class Body():
     def __init__(self, head):
@@ -602,8 +582,19 @@ class Body():
             elif self.head.y < self.owner.y:
                 __y -= 1
 
-            #print "moving to [{}][{}]".format(__x,__y)
             self.owner.move(__x, __y)
+
+class DeadBody:
+    global objects
+    def __init__(self,monster,turns=20):
+        self.monster = monster
+        self.turns = turns
+
+    def take_turn(self):
+        if self.turns > 0:
+            self.turns -= 1
+        else:
+            objects.remove(self.monster)
 
 class BasicMonster:
         
@@ -611,33 +602,177 @@ class BasicMonster:
     def take_turn(self):
         #a basic monster takes its turn. if you can see it, it can see you
         monster = self.owner
-        ai = "{}@[{},{}]?".format(monster.name, monster.x, monster.y)
+        state = monster.fighter.state
         _dist = int(monster.distance_to(player))
+        if state in ['agressive']:
+            ai = "{}@[{},{}]?".format(monster.name, monster.x, monster.y)
 
-        #if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
-        if _dist < 20:
-            ai+=", I see you!"
-            notifications.append(Notif('*',4,monster.x,monster.y-1))
-            
-            #move towards player if far away
-            ai+=", _dist[{}]".format(_dist)
-            if _dist > 15:
-                ai+=", ?"
-                notifications.append(Notif('?',4,monster.x,monster.y-1))
-                self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
-            elif _dist > 1:
-                ai+=", !"
+            #if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+            if _dist < 20:
+                ai+=", I see you!"
+                notifications.append(Notif('*',4,monster.x,monster.y-1))
+                
+                #move towards player if far away
+                ai+=", _dist[{}]".format(_dist)
+                if _dist > 10:
+                    ai+=", ?"
+                    notifications.append(Notif('?',4,monster.x,monster.y-1))
+                    self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+                    if player.x != monster.x and player.y != monster.y:
+                        monster.fighter.state = 'watchfull'
+                elif _dist > 1:
+                    ai+=", !"
+                    notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                    monster.move_towards(player.x, player.y)
+                #close enough, attack! (if the player is still alive.)
+                else:
+                    ai+=", X"
+                    notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
+                    monster.fighter.attack(player)
+        elif state in ['watchfull']:
+            if _dist <= 5:
                 notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
                 monster.move_towards(player.x, player.y)
-            #close enough, attack! (if the player is still alive.)
-            else:
-                ai+=", X"
-                notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
-                monster.fighter.attack(player)
+                monster.fighter.state = 'agressive'
+        elif state in ['neutral']:
+            if _dist <= 1:
+                monster.fighter.talk('watch it..',color=libtcod.dark_yellow)
+                monster.fighter.state = 'agressive'
+        elif state in ['friendly']:
+            _dist = int(monster.distance_to(player))
+            if _dist <= 1:
+                monster.fighter.talk('hey friend!',color=libtcod.green)
         else:
-            ai+=", meh"
             self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
         #print ai
+
+class Shopowner:
+        
+    #AI for a basic monster.
+    def take_turn(self):
+        #a shopkeper takes its turn.
+        monster = self.owner
+        state = monster.fighter.state
+
+        _dist = int(monster.distance_to(player))
+        #if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+        if _dist < 20:
+            if state in ['agressive']:
+                notifications.append(Notif('*',4,monster.x,monster.y-1))
+                ai+=", _dist[{}]".format(_dist)
+                if _dist <=1:
+                     monster.fighter.attack(player)
+                elif _dist > 1:
+                    notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                    monster.move_towards(player.x, player.y)
+            elif state in ['neutral','friendly']:
+                profession = monster.name.split()[0]
+                if profession in ['lumberjack']:
+                    slogan = random.choice(['i sell axes','imma lumbjak','nd i\'m ok'])
+                elif profession in ['blacksmith']:
+                    slogan = random.choice(['get metal','metal suits!'])
+                elif profession in ['leathersmith']:
+                    slogan = random.choice(['leathers!','all leathers!'])
+                elif profession in ['nurse']:
+                    slogan = random.choice(['24h health','+'])
+                elif profession in ['old','wise']:
+                    slogan = random.choice(['ohm','zen','aum'])
+                else:
+                    slogan = random.choice(['...','..','.', ])
+
+                monster.fighter.talk(slogan,color=libtcod.white)
+        else:
+            self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+        #print ai
+
+    def sell_stuff(self):
+        global player, lair_name
+        inv = []
+        shpowner = self.owner
+        if shpowner.name.split()[0] in ['lumberjack']:
+            inv.append(addItem('work axe',-1,-1,False))
+            opt = arrow_menu('wanna buy my axe? 20$',['yes I would!','no thanks,got one already'],35,10,4,2)
+            if opt == 0:
+                if player.fighter.purse >= 20:
+                    player.fighter.purse -= 20
+                    inventory.append(inv[0])
+                    shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
+                else:
+                    shpowner.fighter.talk(random.choice(['no can do.','bring money next time!']))
+        elif shpowner.name.split()[0] in ['blacksmith']:
+            opt = arrow_menu('wanna be more metal??',['short sword - 20$','long sword - 30$','metal armour - 40$','no thanks,got one already'],35,10,4,2)
+            if opt == 3:
+                shpowner.fighter.talk(random.choice(['oh.. ok...','bye then']))
+            elif opt in [0,1,2]:
+                if opt == 0:
+                    price = 20
+                    inv.append(addItem('short sword',-1,-1,False))
+                elif opt == 1:
+                    inv.append(addItem('long sword',-1,-1,False))
+                    price = 30
+                elif opt == 2:
+                    price = 40
+                    inv.append(addItem('metal armour',-1,-1,False))
+                if player.fighter.purse >= price:
+                    player.fighter.purse -= price
+                    inventory.append(inv[0])
+                    shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
+                else:
+                    shpowner.fighter.talk(random.choice(['no money, no armor','do i look like charity?']))      
+        elif shpowner.name.split()[0] in ['leathersmith']:
+            opt = arrow_menu('wanna buy leather stuff?',['leather hat - 1$','leather armour - 10$','no thanks,got one already'],25,10,4,2)
+            if opt == 2:
+                shpowner.fighter.talk(random.choice(['oh.. ok...','bye then']))
+            elif opt in [0,1]:
+                if opt == 0:
+                    price = 1
+                    inv.append(addItem('leather hat',-1,-1,False))
+                elif opt == 1:
+                    price = 10
+                    inv.append(addItem('leather armour',-1,-1,False))
+                if player.fighter.purse >= price:
+                    player.fighter.purse -= price
+                    inventory.append(inv[0])
+                    shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
+                else:
+                    shpowner.fighter.talk(random.choice(['no money, no armor','do i look like charity?']))      
+        elif shpowner.name.split()[0] in ['nurse']:
+            opt = arrow_menu('{} asks if you wish to heal for $5'.format(shpowner.name),[random.choice(['yes, please!','here you go','do take visa?']),random.choice(['i\'ll pass, thanks','sorry, mom won\'t let me','let me come back to it later...'])],35,10,4,2)
+            if opt == 0:
+                if player.fighter.purse >= 5:
+                    player.fighter.purse -= 5
+                    player.fighter.hp = player.fighter.base_max_hp
+                    if player.fighter.hp < 7:
+                        player.fighter.color = HEALTH_COLOR[player.fighter.hp]
+                    else:
+                        player.fighter.color = libtcod.white
+                    shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
+                else:
+                    shpowner.fighter.talk(random.choice(['i don\'t work for free', 'and how will you pay?','come back with money!']))       
+        elif shpowner.name.split()[0] in ['old','wise']:
+            if shpowner.name.split()[0] == 'wise':
+                opt = 0
+                while opt >= 0:
+                    opt = arrow_menu('hello young man. i can tell you about :',['the kobolds','their goal','the world','or you can leave me alone'],30)
+                    if opt == 0:
+                        msgbox('they stink, they are evil and they hurt you. but they are stupid. and each one is very weak.')
+                    elif opt == 1:
+                        msgbox('their queen, the dragon, has been feeding and will soon come out to kill us all. unless someone can get to her, on the deepest caves in {} and kill her.'.format(lair_name))
+                    elif opt == 2:
+                        msgbox('our world has this forest, some woods, a few mounts and the city in the lake where the humans have their shops and.. women.')
+                    else:
+                        shpowner.fighter.talk('go avenge you family')
+                        opt = -1
+            else:
+               shpowner.fighter.talk('go avenge you family')
+            if player.fighter.max_hp < 7:
+               player.fighter.base_max_hp += 1
+            player.fighter.heal(19)
+        elif shpowner.name.split()[0] in ['princess']:
+            shpowner.fighter.talk('thank you for saving me!',libtcod.light_pink)
+        else:
+            shpowner.fighter.talk('can\'t help you, sorry')
+
 
 class ConfusedMonster:
     #AI for a temporarily confused monster (reverts to previous AI after a while).
@@ -654,6 +789,125 @@ class ConfusedMonster:
         else:  #restore the previous AI (this one will be deleted because it's not referenced anymore)
             self.owner.ai = self.old_ai
             message('The ' + self.owner.name + ' is no longer confused!', libtcod.red)
+
+
+
+class Fighter:
+    #combat-related properties and methods (monster, player, NPC).
+    def __init__(self, hp, defense, power, xp, death_function=None,attack_speed=DEFAULT_ATTACK_SPEED,state='agressive'):
+        self.base_max_hp = hp
+        self.hp = hp
+        if self.hp < 7:
+            self.color = HEALTH_COLOR[hp]
+        else:
+            self.color = libtcod.white
+        self.base_defense = defense
+        self.base_power = power
+        self.xp = xp
+        self.death_function = death_function
+        self.attack_speed = attack_speed
+        self.ammo = [100]
+        self.purse = 0
+        self.state = state
+ 
+    @property
+    def power(self):  #return actual power, by summing up the bonuses from all equipped items
+        bonus = sum(equipment.power_bonus for equipment in get_all_equipped(self.owner))
+        return self.base_power + bonus
+ 
+    @property
+    def defense(self):  #return actual defense, by summing up the bonuses from all equipped items
+        bonus = sum(equipment.defense_bonus for equipment in get_all_equipped(self.owner))
+        return self.base_defense + bonus
+ 
+    @property
+    def max_hp(self):  #return actual max_hp, by summing up the bonuses from all equipped items
+        bonus = sum(equipment.max_hp_bonus for equipment in get_all_equipped(self.owner))
+        return self.base_max_hp + bonus
+ 
+    def attack(self, target):
+        #a simple formula for attack damage
+        #roll power d10
+        rolls = [random.randint(1,10)]
+        hits = 0
+        for i in range(0,self.power):
+            rolls.append(random.randint(1,10))
+        roll_history = ""
+        for roll in rolls:
+            roll_history += '[{}]'.format(roll)
+            if roll == 10:
+                hits+=1
+            elif roll > target.fighter.defense:
+                hits+=1
+            elif roll == 1:
+                hits-=1
+
+        
+        damage = hits
+        self.owner.wait = self.attack_speed
+        if damage > 0:
+            #make the target take some damage
+            message(self.owner.name + ' hits ' + target.name + ' with ' + str(damage) + ' dmg. ' + "{}".format(roll_history))
+            target.fighter.take_damage(damage)
+        else:
+            message(self.owner.name + ' misses ' + target.name+ ". " + "{}".format(roll_history))
+ 
+    def take_damage(self, damage):
+        #apply damage if possible
+        if damage > 0:
+            self.hp -= damage
+            if self.hp > 0:
+                if self.hp > 6:
+                    _hp = 7
+                else:
+                    _hp = self.hp
+                self.color = HEALTH_COLOR[_hp]
+            else:
+                self.color = HEALTH_COLOR[0]
+            #check for death. if there's a death function, call it
+            if self.hp <= 0:
+                function = self.death_function
+                if function is not None:
+                    function(self.owner)
+ 
+                if self.owner != player:  #yield experience to the player
+                    player.fighter.xp += self.xp
+        if self.state == 'friendly':
+            self.state = 'watchfull'
+        elif self.state in ['watchfull','neutral']:
+            self.state = 'aggressive'
+ 
+    def heal(self, amount):
+        #heal by the given amount, without going over the maximum
+        self.hp += amount
+        if self.hp > self.max_hp:
+            self.hp = self.max_hp
+        if self.hp < 7:
+            self.color = HEALTH_COLOR[self.hp]
+        else:
+            self.color = libtcod.white
+
+    def talk(self,text,color=libtcod.yellow):
+        if color == libtcod.yellow:
+            if self.state == 'friendly':
+                color = libtcod.green
+            elif self.state in ['neutral', 'watchfull']:
+                color = libtcod.white
+            elif self.state == 'aggressive':
+                color = libtcod.red
+        #if self.owner.x +1+ len(text) < MAP_WIDTH:
+        x = self.owner.x + 1
+        #else:
+        #   x = MAP_WIDTH - len(text) - 2
+
+        if self.owner.y >= 1:
+            y = self.owner.y -1
+        else:
+            y = self.owner.y
+
+        notifications.append(Notif(text,5,x,y,color))
+
+
  
 class Item:
     #an item that can be picked up and used.
@@ -661,27 +915,128 @@ class Item:
         self.use_function = use_function
  
     def pick_up(self):
-        #add to the player's inventory and remove from the map
-        inventory.append(self.owner)
-        objects.remove(self.owner)
-        message('You picked up a ' + self.owner.name + '!', libtcod.green)
-        #special case: automatically equip, if the corresponding equipment slot is unused
+        global inventory
+
+        #check if there are available slots:
+        slt = get_available_slots()
+        opts = 0
+        print slt
+        pick_up = False
+        switch = 'none'
+
+
         equipment = self.owner.equipment
-        if equipment and get_equipped_in_slot(equipment.slot) is None:
+        if equipment and equipment.slot in slt:
             equipment.equip()
+            pick_up = True
+            switch = 'none'
+        elif equipment and (equipment.slot.split(' ')[0] == 'right') and (get_equipped_in_slot('left hand') is None):
+            equipment.slot = 'left hand'
+            equipment.equip()
+            pick_up = True
+        elif equipment:
+            opt_list = ['drop this']
+            if equipment.slot not in ['right hand']:
+                on_tis_slot = get_equipped_in_slot(equipment.slot)
+                opt_list.append('switch with {} on {}'.format(on_tis_slot.owner.name,equipment.slot))
+                opts = 1
+            c_equip_r = get_equipped_in_slot('right hand')
+            if c_equip_r is not None:
+                opt_list.append('switch with {} on right hand'.format(c_equip_r.owner.name))
+            else:
+                opt_list.append('equip on right hand')
+            c_equip_l = get_equipped_in_slot('left hand')
+            if c_equip_l is not None:
+                opt_list.append('switch with {} on left hand'.format(c_equip_l.owner.name))
+            else:
+                opt_list.append('equip on left hand')
+            slos = get_available_slots()
+            if 'bag 0' in slos or 'bag 1' in slos or 'bag 2' in slos:
+                for i in range(0,get_equipped_by_name('bag').capacity):
+                    if 'bag {}'.format(i) in slos:
+                        opt_list.append('bag it at {}'.format(i))
+
+                    
+            opt = arrow_menu('- {} -'.format(self.owner.name),opt_list,50)
+            #print 'opt : {}'.format(opt)
+            if opt == 0:
+                #print 'DROP TH BEAT!'
+                pick_up = False
+                switch = 'drop'
+            elif opts == 1 and opt == 1:
+                #print 'switching!'
+                pick_up = True
+                switch = equipment.slot
+            elif opt == 1+opts:                             
+                #print 'equip in R'
+                pick_up = True
+                if c_equip_r is not None:
+                   switch = 'right'
+            elif opt == 2+opts:
+                #print 'equip in L'
+                pick_up = True
+                if c_equip_l is not None:
+                   switch = 'left'
+            else:
+                pick_up = True
+                switch = 'bag {}'.format(opt_list[opt].split(' ')[3])
+                #print 'bag me @[{}] and call me a pretzel'.format(switch)
+
+        if pick_up:
+            #add to the player's inventory and remove from the map
+            inventory.append(self.owner)
+            objects.remove(self.owner)
+            message('You picked up a ' + self.owner.name + '!', libtcod.green)
+            if switch == 'right':
+                c_equip_r.owner.item.drop()
+                self.use()
+            elif switch == 'left':
+                c_equip_l.owner.item.drop()
+                self.owner.equipment.slot = 'left hand'
+                self.use()
+            elif switch.split()[0] == 'bag':
+                self.owner.equipment.slot = switch
+                self.use()
+            elif switch != 'none':
+                self.use()
+        else:
+            message('you drop a {} on the floor'.format(self.owner.name))
+
+
  
-    def drop(self):
+    def drop(self,x=-1,y=-1):
         #special case: if the object has the Equipment component, dequip it before dropping
         if self.owner.equipment:
             self.owner.equipment.dequip()
+
+        self.owner.equipment.slot == self.owner.equipment.old_slot
  
+        if self.owner.name.split()[1] in ['bag','backpack']:
+            for obj in inventory:
+                if obj.equipment:
+                    print 'droppping stuff! [' + obj.equipment.slot +"]"
+                    if obj.equipment.slot in ['bag 0','bag 1','bag 2','backpack']:
+                        obj.item.drop()
+                        print 'dropped {}'.format(obj.name)
+
+
+
+
         #add to the map and remove from the player's inventory. also, place it at the player's coordinates
         objects.append(self.owner)
         inventory.remove(self.owner)
-        self.owner.x = player.x
-        self.owner.y = player.y
-        message('You dropped a ' + self.owner.name + '.', libtcod.yellow)
- 
+        if x == -1:
+            self.owner.x = player.x
+            self.owner.y = player.y
+            message('You dropped a ' + self.owner.name + '.', libtcod.yellow)
+        else:
+            self.owner.x = x
+            self.owner.y = y
+            message('You threw a ' + self.owner.name + '.', libtcod.yellow)
+
+        self.owner.send_to_back()
+
+
     def use(self):
         #special case: if the object has the Equipment component, the "use" action is to equip/dequip
         if self.owner.equipment:
@@ -697,11 +1052,12 @@ class Item:
  
 class Equipment:
     #an object that can be equipped, yielding bonuses. automatically adds the Item component.
-    def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0):
+    def __init__(self, slot, power_bonus=0, defense_bonus=0, max_hp_bonus=0,capacity=0):
         self.power_bonus = power_bonus
         self.defense_bonus = defense_bonus
         self.max_hp_bonus = max_hp_bonus
- 
+        self.capacity = capacity
+        self.old_slot = slot
         self.slot = slot
         self.is_equipped = False
  
@@ -715,7 +1071,13 @@ class Equipment:
         #if the slot is already being used, dequip whatever is there first
         old_equipment = get_equipped_in_slot(self.slot)
         if old_equipment is not None:
-            old_equipment.dequip()
+            if self.slot in ['right hand']:
+                self.slot = 'left hand'
+                old_equipment = get_equipped_in_slot(self.slot)
+                if old_equipment is not None:
+                    old_equipment.dequip()
+            else:
+                old_equipment.dequip()
  
         #equip object and show a message about it
         self.is_equipped = True
@@ -725,20 +1087,28 @@ class Equipment:
         #dequip object and show a message about it
         if not self.is_equipped: return
         self.is_equipped = False
+        if self.slot.split()[0] in ['bag','left']:
+            self.slot = self.old_slot
+
         message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
  
-class Weapon:
-    #an object that can be shot
-    def __init__(self, name, power_bonus=0, ammo=0, max_ammo=10, radius=0):
-        self.name = name
-        self.power_bonus = power_bonus
-        #self.ammo = ammo
-        self.max_ammo = max_ammo
-        self.radius = radius
+def get_available_slots():
+    slots = ['right hand','left hand','head','body','back','neck']
+    for obj in inventory:
+        if obj.equipment and obj.equipment.is_equipped:
+            if obj.name.split()[1] in ['backpack','bag'] or obj.name.split()[0] in ['bag']:
+                for i in range(0, obj.equipment.capacity):
+                    slots.append('{} {}'.format(obj.name.split()[1],i))
+            slots.remove(obj.equipment.slot)
+    return slots
 
-    #spends a shot and returns damage dealt
-    def shoot(self):
-        return self.power_bonus
+def get_equipped_by_name(name):  #returns the equipment in a slot, or None if it's empty
+    for obj in inventory:
+        if obj.equipment and obj.equipment.is_equipped and obj.name.split()[1] == 'bag':
+            return obj.equipment
+    return None
+
+
   
 def get_equipped_in_slot(slot):  #returns the equipment in a slot, or None if it's empty
     for obj in inventory:
@@ -758,6 +1128,11 @@ def get_all_equipped(obj):  #returns a list of equipped items
   
 def is_blocked(x, y):
     #first test the map tile
+    if x >= MAP_WIDTH -1 :
+        return True
+    if y >= MAP_HEIGHT - 1 :
+        return True
+
     if map[x][y].blocked:
         return True
  
@@ -778,12 +1153,13 @@ def pointer_1():
     """
         MAP STUFF
     """
+
 def create_room(room):
     global map
     #go through the tiles in the rectangle and make them passable
     for x in range(room.x1 + 1, room.x2):
         for y in range(room.y1 + 1, room.y2):
-            map[x][y] = Tile(True,terrain=CHAR_DIRT)
+            map[x][y] = Tile(True,terrain='.')
             #map[x][y].block_sight = False
  
 def create_h_tunnel(x1, x2, y):
@@ -802,53 +1178,78 @@ def create_v_tunnel(y1, y2, x):
         map[x][y].blocked = False
         map[x][y].block_sight = False
  
-def place_thing(thing,_wid=-1,avoid=(0,0),has_stairs=True):
+def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
     if _wid == -1:
-        _wid = MAP_WIDTH / 10
+        _wid = Mint(MAP_WIDTH / 20)
+
     global map, stairs
     _center = Tile(True,terrain=thing)
-    startC = 1
+    startC = _wid +1
     if thing in [CHAR_TALL_GRASS]:
-    	startC += 2
-    _x = random.randint(startC,MAP_WIDTH-_wid);
-    _y = random.randint(startC,MAP_HEIGHT-_wid);
-    while (map[_x][_y].terrain not in [CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_GRASS] ) and (_x,_y) != avoid :
-        _x = random.randint(startC,MAP_WIDTH-_wid)
-        _y = random.randint(startC,MAP_HEIGHT-_wid)
-        print "x{} y{}".format(_x,_y)
+        startC += 2
 
+    #print 'mwid[{}]mhei[{}] wid[{}]'.format(MAP_WIDTH,MAP_HEIGHT,_wid)
+    _x = random.randint(startC,MAP_WIDTH-1-_wid);
+    _y = random.randint(startC,MAP_HEIGHT-1-_wid);
+    if sparse > 0:
+        acceptable = [CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_GRASS]
+    else:
+        acceptable = [CHAR_LONG_GRASS,CHAR_GRASS]
+
+    done = False
+    while not done:
+            _x = random.randint(startC,MAP_WIDTH)
+            _y = random.randint(startC,MAP_HEIGHT)
+            if _x+_wid >= MAP_WIDTH or _y +_wid >= MAP_HEIGHT: # or _x-_wid < 0 or _y -_wid < 0:
+                #print 'x{},y{} unnaceptable, sent them home.'.format(_x,_y)
+                continue
+            if thing in [CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_GRASS]:
+                done = True
+
+            done = True
+            for __x in range(_x-_wid,_x+_wid):
+                for __y in range(_y-_wid, _y+_wid):
+                    if map [__x][__y].terrain not in acceptable:
+                        done = False
+
+            
     
     map[_x][_y] = _center
     s_thing =(_x,_y)
-    print '{} center @[{},{}]'.format(thing,_x,_y)
-
 
     placed_entry = True
     if thing not in [CHAR_LONG_GRASS]: 
-    	placed_entry = False
-    for _xx in range(_x-_wid,_x+_wid):
-        for _yy in range(_y-_wid,_y+_wid):
-            if (abs(_xx - _x) > 1) and (abs(_yy - _y) > 1) and map[_xx][_yy].terrain == CHAR_LONG_GRASS:
-                if random.randint(0,3) >= 2:
-	                map[_xx][_yy] = Tile(True,terrain=thing)
+        placed_entry = False
+    for _xx in range(max(0,_x-_wid),min(_x+_wid,MAP_WIDTH)):
+        for _yy in range(max(0,_y-_wid),min(_y+_wid,MAP_HEIGHT)):
+            if map[_xx][_yy].terrain in acceptable:
+                if random.randint(0,5) < sparse :
+                    map[_xx][_yy] = Tile(True,terrain=thing)
                 else:
-	            	if not placed_entry and has_stairs:
-						map[_xx][_yy] = Tile(False,terrain=CHAR_STAIRS)
-						stairs = Object(_xx, _yy, '<', 'stairs', libtcod.white, always_visible=True)
-						placed_entry = True
-	            	elif map[_xx-1][_yy].terrain == CHAR_LONG_GRASS and map[_xx][_yy-1].terrain == CHAR_LONG_GRASS:
-						map[_xx][_yy] = Tile(True,terrain=thing)	
+                    if not placed_entry and has_stairs:
+                        map[_xx][_yy] = Tile(False,terrain=CHAR_STAIRS)
+                        stairs = Object(_xx, _yy, '<', 'stairs', libtcod.white, always_visible=True)
+                        placed_entry = True
+                    elif map[_xx-1][_yy].terrain in acceptable and map[_xx][_yy-1].terrain in acceptable:
+                        map[_xx][_yy] = Tile(True,terrain=thing)    
             else:
                 map[_xx][_yy] = Tile(True,terrain=thing)
     if not placed_entry and has_stairs:
+        map[_xx][_yy] = Tile(False,terrain=CHAR_STAIRS)
         stairs = Object(_x-_wid, _y-_wid, '<', 'stairs', libtcod.white, always_visible=True)
 
     return s_thing
 
 
-def make_world_map(grassness=20):
-    global map, objects, stairs
+def make_world_map(grassness=20,start=False):
+    global map, objects, stairs, dung_list, lair_name
 
+    dung_list = []
+    name_list = []
+    for i in range(0,15 ):
+        n =  generateName(4)
+        name_list.append(n)
+    #print name_list
     if (grassness > MAP_WIDTH / 6):
         grassness = int(MAP_WIDTH / 6)
 
@@ -865,18 +1266,74 @@ def make_world_map(grassness=20):
     map = [[Tile(False,terrain=CHAR_LONG_GRASS) for y in range(0,MAP_HEIGHT)] for x in range(0,MAP_WIDTH)]
 
     #place mountain
-    place_thing(CHAR_TALL_GRASS,int(MAP_WIDTH/3),(0,0), False)
-    c = place_thing(CHAR_MOUNTAIN,-1,(0,0));
-    objects.append(stairs)
-    c = place_thing(CHAR_FOREST,-1, c);
-    objects.append(stairs)
-    c = place_thing(CHAR_LAKE,-1 ,c);
-    objects.append(stairs)
-    c = place_thing(CHAR_DIRT,-1 , c);
-    objects.append(stairs)
+    place_thing(CHAR_TALL_GRASS,int(MAP_HEIGHT/3), False,5)
 
-def make_map(terrain=CHAR_MOUNTAIN):
-    global map, objects, stairs
+    place_thing(CHAR_MOUNTAIN,8,True,3);
+    objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    n = '{} montain'.format(n)
+    possible_lairs = [n]
+    dung_list.append(Dungeon(n,stairs.x, stairs.y))
+
+    place_thing(CHAR_FOREST,6,True,1);
+    objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    dung_list.append(Dungeon('{}\'s forest'.format(n),stairs.x, stairs.y))
+    place_thing(CHAR_LAKE,6,True,3);
+    objects.append(stairs)
+    n = random.choice(name_list)
+    name_list.remove(n)
+    n += random.choice([' city',' town',' ville'])
+    dung_list.append(Dungeon('{} '.format(n),stairs.x, stairs.y))
+
+    for _x in range(2,4):
+        place_thing(CHAR_MOUNTAIN,3,True,3);
+        objects.append(stairs)
+        n = random.choice(name_list)
+        name_list.remove(n)
+        n = 'mount {}'.format(n)
+        possible_lairs.append(n)
+        dung_list.append(Dungeon(n,stairs.x, stairs.y))
+        #print '({},{}) - {}'.format(n, stairs.x, stairs.y)
+
+    for _x in range(1,2):
+        place_thing(CHAR_FOREST,3,True,1);
+        objects.append(stairs)
+        n = random.choice(name_list)
+        name_list.remove(n)
+        dung_list.append(Dungeon('{} woods'.format(n),stairs.x, stairs.y))
+    
+    for _x in range(1,2):
+    place_thing(CHAR_SAND,2+_x, True, 1);
+        objects.append(stairs)
+        n = random.choice(name_list)
+        name_list.remove(n)
+        dung_list.append(Dungeon('{} desert'.format(n),stairs.x, stairs.y))
+
+    
+    c = place_thing(CHAR_DIRT,7, False, 6);
+    player.x, player.y = c
+    if start:
+        map[player.x-2][player.y-2] = Tile(True,terrain='-')
+        map[player.x-1][player.y-2] = Tile(True,terrain='X')
+        map[player.x-3][player.y-2] = Tile(True,terrain='X')
+        map[player.x-1][player.y-3] = Tile(True,terrain='.')
+        map[player.x-2][player.y-3] = Tile(True,terrain='X')
+        map[player.x-3][player.y-3] = Tile(True,terrain='|')
+        map[player.x-1][player.y-4] = Tile(True,terrain='-')
+        map[player.x-2][player.y-4] = Tile(True,terrain='-')
+        map[player.x-3][player.y-4] = Tile(True,terrain='-')
+
+    lair_name = random.choice(possible_lairs)
+    #print 'dragon @[{}]'.format(lair_name)
+
+
+
+
+def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
+    global map, objects, stairs, lair_name, dungeon_level
  
     #the list of objects with just the player
     for ob in objects:
@@ -884,110 +1341,191 @@ def make_map(terrain=CHAR_MOUNTAIN):
             new_obj = [ob]
             break
     objects = new_obj
-
     objects.append(player)
  
-    #fill map with "blocked" tiles
-    map = [[ Tile(True,terrain=terrain)
-             for y in range(MAP_HEIGHT) ]
-           for x in range(MAP_WIDTH) ]
-    print "made a map! adding {} rooms".format(MAX_ROOMS)
+    _stairs_ = True
     rooms = []
     num_rooms = 0
- 
-    for r in range(MAX_ROOMS):
-        #random width and height
-        w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        #random position without going out of the boundaries of the map
-        x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
-        y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
- 
-        #"Rect" class makes rectangles easier to work with
-        new_room = Rect(x, y, w, h)
- 
-        #run through the other rooms and see if they intersect with this one
-        failed = False
-        for other_room in rooms:
-            if new_room.intersect(other_room):
-                failed = True
-                break
- 
-        if not failed:
-            #this means there are no intersections, so this room is valid
- 
-            #"paint" it to the map's tiles
-            create_room(new_room)
- 
-            #center coordinates of new room, will be useful later
-            (new_x, new_y) = new_room.center()
- 
-            if num_rooms == 0:
-                #this is the first room, where the player starts at
-                player.x = new_x
-                player.y = new_y
+    min_rooms = 6
+    max_rooms_here = MAX_ROOMS
+    r_min = ROOM_MIN_SIZE
+    r_max = ROOM_MAX_SIZE
+
+    m_wid = MAP_WIDTH
+    m_hei = MAP_HEIGHT
+    margin = 2
+
+    if name is None:
+        name = 'some mountain'
+    nm = name.split()[1]
+    place_sage = False
+    if terrain == CHAR_FOREST or nm in ['forest','woods']:
+        max_rooms_here += MAX_ROOMS*15
+        min_rooms = MAX_ROOMS
+        place_sage = True
+        r_max = 8
+        r_min = 5
+        _stairs_ = False        
+        terrain = CHAR_FOREST
+        print "sage?"
+        if nm in ['forest']:
+            print "wise"
+            sage_type = 'wise man'
+        else:
+            print 'old'
+            sage_type = 'old man'
+        if nm == 'woods':
+            margin = 25
+    elif terrain == CHAR_LAKE or nm in ['city','town','ville']:
+        m_wid = 100
+        m_hei = 100
+        margin = 25
+        r_max = 20
+        r_min = 10
+        max_rooms_here = 6
+        _stairs_ = False        
+        terrain = CHAR_LAKE
+        inabitants = ['lumberjack','leathersmith','nurse','farmer','blacksmith','nurse']
+    elif terrain == CHAR_SAND:
+    margin = 5
+    r_max = 85
+    r_min = 60
+    min_rooms = 1
+    max_rooms_here = 2
+    _stairs_ = False
+
+    if name != lair_name and dungeon_level > 2:
+        _stairs_ = False
+        margin = 20
+
+    if name.split()[0] == 'mount':
+        margin = 15
+        r_min -= 3
+        r_max -= 3
+
+
+
+    #fill map with "blocked" tiles
+    map = [[ Tile(True,terrain=terrain)
+             for y in range(m_hei) ]
+           for x in range(m_wid) ]
+    
+    #print '2 [{}]< min_rooms [{}]'.format(num_rooms,min_rooms)
+
+    if terrain == CHAR_MOUNTAIN:
+        max_rooms_here += MAX_ROOMS*6
+
+    #print 'num_rooms [{}]< min_rooms [{}]'.format(num_rooms,min_rooms)
+    iterations = 100
+    while num_rooms < min_rooms and iterations > 0:
+        for r in range(max_rooms_here):
+            #random width and height
+            w = libtcod.random_get_int(0, r_min, r_max)
+            h = libtcod.random_get_int(0, r_min, r_max)
+            #random position without going out of the boundaries of the map
+            x = libtcod.random_get_int(0, margin, m_wid - w - margin)
+            y = libtcod.random_get_int(0, margin, m_hei - h - margin)
+     
+            #"Rect" class makes rectangles easier to work with
+            new_room = Rect(x, y, w, h)
+            #print 'new_room [{}][{}][{}][{}]'.format(x, y, w, h)
+            #run through the other rooms and see if they intersect with this one
+            failed = False
+            for other_room in rooms:
+                if new_room.intersect(other_room):
+                    failed = True
+                    break
+     
+            if failed:
+                iterations -= 1
             else:
-                #all rooms after the first:
-                #connect it to the previous room with a tunnel
- 
-                #center coordinates of previous room
-                (prev_x, prev_y) = rooms[num_rooms-1].center()
- 
-                #draw a coin (random number that is either 0 or 1)
-                if libtcod.random_get_int(0, 0, 1) == 1:
-                    print "adding tunnel h"
-                    #first move horizontally, then vertically
-                    create_h_tunnel(prev_x, new_x, prev_y)
-                    create_v_tunnel(prev_y, new_y, new_x)
+                #this means there are no intersections, so this room is valid
+                #"paint" it to the map's tiles
+                create_room(new_room)
+                #center coordinates of new room, will be useful later
+                (new_x, new_y) = new_room.center()
+                if num_rooms == 0:
+                    #this is the first room, where the player starts at
+                    player.x = new_x
+                    player.y = new_y
                 else:
-                    print "adding tunnel v"
-                    #first move vertically, then horizontally
-                    create_v_tunnel(prev_y, new_y, prev_x)
-                    create_h_tunnel(prev_x, new_x, new_y)
- 
-            #add some contents to this room, such as monsters
-            place_objects(new_room)
-            
- 
-            #finally, append the new room to the list
-            rooms.append(new_room)
-            num_rooms += 1
+                    #all rooms after the first:
+                    #connect it to the previous room with a tunnel
+                    #center coordinates of previous room
+                    (prev_x, prev_y) = rooms[num_rooms-1].center()
+                    #draw a coin (random number that is either 0 or 1)
+                    if libtcod.random_get_int(0, 0, 1) == 1:
+                        #first move horizontally, then vertically
+                        create_h_tunnel(prev_x, new_x, prev_y)
+                        create_v_tunnel(prev_y, new_y, new_x)
+                    else:
+                        #first move vertically, then horizontally
+                        create_v_tunnel(prev_y, new_y, prev_x)
+                        create_h_tunnel(prev_x, new_x, new_y)
+                #add some contents to this room, such as monsters
+                if terrain in [CHAR_LAKE]:
+                    inabitants = place_homes(new_room,inabitants)
+                else:
+                    if num_rooms > 0:
+                        place_objects(new_room)
+                #finally, append the new room to the list
+                rooms.append(new_room)
+                num_rooms += 1
+    
+    if place_sage:
+        _r_  = rooms[random.randint(2,num_rooms-1)]
+        place_homes(_r_,[sage_type])
  
     #create stairs at the center of the last room
-    stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
-    objects.append(stairs)
-    stairs.send_to_back()  #so it's drawn below the monsters
+    if _stairs_:
+        #stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
+        map[new_x][new_y].terrain = '<'
+        #objects.append(stairs)
+        #stairs.send_to_back()  #so it's drawn below the monsters
+
+    map[player.x][player.y].terrain = '>'
+    map[player.x][player.y].color = libtcod.yellow
 
 def getMapFromFile():
     string_map = ['#######################################################'];
 
     portal = ['################################################################################',
-        '################################################################################',
-        '################################################################################',
-        '################################################################################',
-        '################################################################################',
-        '######################################     #####################################',
-        '####################################    x    ###################################',
-        '###################################           ##################################',
-        '##################################      _      #################################',
-        '################################## |         | #################################',
-        '##################################      u      #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## |         | #################################',
-        '##################################             #################################',
-        '################################## ;         | #################################',
-        '##################################             #################################',
-        '######################################## #######################################',
+        '#########                                #######################################',
+        '########   ############################# #######################################',
+        '#######     ############################ ########################################',
+        '####### x < ###########################     #####################################',
+        '######## > ##########################         ###################################',
+        '####################################           ##################################',
+        '##################################               ################################',
+        '#################################                 ###############################',
+        '################################                   ##############################',
+        '##########################                         #######################   ####',
+        '######################                                 ###           ##### u ####',
+        '#####################         #                    #    ##       ##   ####   ####',
+        '#####################       ####                   ##   ##  ##   ##   ##### ######',
+        '#####################      #####                   ##   ##  ##   ##   ##### ######',
+        '#####################      #####                   ##    #  ##    #   ####  ######',
+        '######################      ####                   ##       ##    #    ##   ######',
+        '########################     ###                   ###      ###   ##       #######',
+        '##########################                         ##################     #######',
+        '############################                       ##############################',
+        '#################################                 ###############################',
+        '##################################               ################################',
+        '####################################           ##################################',
+        '#####################################         ###################################',
+        '#######################################     #####################################',
+        '########################################   ######################################',
+        '########################################   ######################################',
+        '####################   ---             #             --- ########################',
+        '####################   |_[ @           #  #          ]_| ########################',
+        '####################   ---                #          --- ########################',
+        '########################################  #######################################',
         '######################################## #######################################',
         '######################################## #######################################',
         '######################################    i#####################################',
         '######################################  z     y#################################',
         '######################################     #####################################',
+        '################################################################################',
         '################################################################################',
         '################################################################################',
         '################################################################################']
@@ -1002,31 +1540,41 @@ def make_customgenericmap(terrain = CHAR_MOUNTAIN):
     MAP_HEIGHT1 = len(smap)
     MAP_WIDTH1 = len(smap[0])
     map = [[Tile(True,terrain=terrain) for y in range(MAP_HEIGHT)] for x in range(MAP_WIDTH)]
+    princess = False
 
-    for y in range(MAP_HEIGHT1):
-        for x in range(MAP_WIDTH1):
-            if smap[y][x] == 'x':
-                new_x = x
-                new_y = y
-                map[x][y] = Tile(True,CHAR_DIRT)
-            elif smap[y][x] == 'y':
-                player.x = x
-                player.y = y
-            elif smap[y][x] != '#':
-                map[x][y] = Tile(False,CHAR_TALL_GRASS)
-
-    #create stairs at the center of the last room
     for ob in objects:
         if ob.name == "dot":
             new_obj = [ob]
             break
     objects = new_obj
 
+    for y in range(MAP_HEIGHT1):
+        for x in range(MAP_WIDTH1):
+            t = smap[y][x]  
+            if t == 'x':
+                new_x = x
+                new_y = y
+                map[x][y] = Tile(False,CHAR_STAIRS)
+            elif t == 'y':
+                player.x = x
+                player.y = y
+            elif t == 'u':
+                map[x][y] = Tile(False,CHAR_DIRT)
+                addMonster('princess',x,y)
+                princess = True
+            elif t == '@':
+                    map[x][y] = Tile(False,CHAR_DIRT)
+                    addMonster('nurse',x,y)
+            elif t != '#':
+                map[x][y] = Tile(False,t)
+
+    #create stairs at the center of the last room
+
 
     stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
+    map[new_x][new_y] = Tile(False, CHAR_STAIRS)
     objects.append(stairs)
     stairs.send_to_back()  #so it's drawn below the monsters
-    print "-----------made kustom"
        
 def make_bsp():
     global map, objects, stairs, bsp_rooms
@@ -1218,7 +1766,44 @@ def from_dungeon_level(table):
         if dungeon_level >= level:
             return value
     return 0
- 
+
+def place_homes(room, inabitants):
+    x,y = room.center() # = libtcod.random_get_int(0, room.x1+5, room.x1+10)
+    #y = libtcod.random_get_int(0, room.y1+5, room.y2-5)
+    npc = random.choice(inabitants)
+    inabitants.remove(npc)
+    
+    if npc not in ['old man','wise man']:
+        map[x-2][y-2] = Tile(True,terrain='-')
+        map[x-1][y-2] = Tile(True,terrain='-')
+        map[x-3][y-2] = Tile(True,terrain='-')
+        map[x-3][y-3] = Tile(True,terrain='|')
+        map[x-2][y-3] = Tile(True,terrain='_')
+        map[x-1][y-3] = Tile(True,terrain=']')
+        map[x-1][y-4] = Tile(True,terrain='-')
+        map[x-2][y-4] = Tile(True,terrain='-')
+        map[x-3][y-4] = Tile(True,terrain='-')
+    else:
+        map[x-2][y-2] = Tile(True,terrain='_')
+        map[x-1][y-2] = Tile(True,terrain='_')
+        map[x-3][y-2] = Tile(True,terrain='_')
+        map[x-3][y-3] = Tile(True,terrain='_')
+        map[x-2][y-3] = Tile(True,terrain='_')
+        map[x-1][y-3] = Tile(True,terrain='_')
+        map[x-1][y-4] = Tile(True,terrain='_')
+        map[x-2][y-4] = Tile(True,terrain='_')
+        map[x-3][y-4] = Tile(True,terrain='_')
+
+    addMonster(npc, x-1, y-3)
+    if random.randint(1,30) > 15:
+        objects.append(Object(x-2, y-3, '$', 'money', libtcod.yellow, always_visible=True))
+
+    return inabitants
+
+
+
+
+
 def place_objects(room):
     #this is where we decide the chance of each monster or item appearing.
  
@@ -1227,25 +1812,34 @@ def place_objects(room):
  
     #chance of each monster
     monster_chances = {}
-    monster_chances['soldier'] = 80  #only enemy up to level 3.
-    monster_chances['imp'] = from_dungeon_level([[85, 2], [95, 5], [0, 7]])
-    monster_chances['sergeant'] = from_dungeon_level([[15, 3], [30, 5], [60, 7]])
+    monster_chances['kobold low_level'] = 25  #only enemy up to level 3.
+    monster_chances['kobold mid_level'] = 20
+    monster_chances['kobold high_level'] = 15
  
     #maximum number of items per room
-    max_items = from_dungeon_level([[1, 1], [2, 4]])
+    max_items = 1
  
     #chance of each item (by default they have a chance of 0 at level 1, which then goes up)
     item_chances = {}
-    item_chances['handgun'] = 35  
-    item_chances['shotgun'] = from_dungeon_level([[25, 3]])
-    item_chances['super shotgun'] =  from_dungeon_level([[25, 6]])
-    item_chances['blue armour'] =   from_dungeon_level([[10, 2]])
-    item_chances['red armour'] =     from_dungeon_level([[5, 4]])
-    item_chances['green armour'] =    from_dungeon_level([[15, 8]])
- 
+    items = ['wooden stick']
+    #item_chances['wooden spear'] = 35  
+    #print dungeon_name
+    if dungeon_name.split()[1] in ['woods']:
+        items.append('bag')
+        #print 'bag is here'
+    #item_chances['backpack'] = 35  
+    if dungeon_name.split()[1] in ['desert']:
+        items.append('wooden boomerang')
+    if dungeon_name not in lair_name and dungeon_level > 2:
+        #items.append('wooden boomerang')
+        #items.append('long sword')
+        #items.append('metal armour')
+        addMonster('kobold champion', x,y,'aggressive')
+        #print 'wooden boomerang, long sword  metal armour is here'
+        
  
     #choose random number of monsters
-    num_monsters = libtcod.random_get_int(0, 0, max_monsters)
+    num_monsters = libtcod.random_get_int(0, 2, 6)
  
     for i in range(num_monsters):
         #choose random spot for this monster
@@ -1255,32 +1849,10 @@ def place_objects(room):
         #only place it if the tile is not blocked
         if not is_blocked(x, y):
             choice = random_choice(monster_chances)
-            if choice == 'soldier':
-                #create a soldier
-                fighter_component = Fighter(hp=10, defense=0, power=4, xp=35, death_function=monster_death)
-                ai_component = BasicMonster()
-        
-                monster = Object(x, y, 'k', 'soldier', libtcod.desaturated_green,
-                                 blocks=True, fighter=fighter_component, ai=ai_component)
-            elif choice == 'sergeant':
-                #create a sergeant
-                fighter_component = Fighter(hp=6, defense=2, power=6, xp=65, death_function=monster_death)
-                ai_component = BasicMonster()
- 
-                monster = Object(x, y, 'K', 'sergeant', libtcod.darker_green,
-                                 blocks=True, fighter=fighter_component, ai=ai_component)
-            elif choice == 'imp':
-                #create a imp
-                fighter_component = Fighter(hp=15, defense=4, power=3, xp=85, death_function=monster_death)
-                ai_component = BasicMonster()
- 
-                monster = Object(x, y, 'K', 'imp', libtcod.darker_red,
-                                 blocks=True, fighter=fighter_component, ai=ai_component)
- 
-            objects.append(monster)
- 
+            addMonster(choice,x,y,'agressive')
+
     #choose random number of items
-    num_items = libtcod.random_get_int(0, 0, max_items)
+    num_items = libtcod.random_get_int(0, 0, 1) # max_items)
  
     for i in range(num_items):
         #choose random spot for this item
@@ -1289,36 +1861,152 @@ def place_objects(room):
  
         #only place it if the tile is not blocked
         if not is_blocked(x, y):
-            choice = random_choice(item_chances)
-           
-            if choice == 'handgun':
-                #create a handgun
-                equipment_component = Equipment(slot='right hand', power_bonus=3)
-                item = Object(x, y, 'h', 'handgun', libtcod.sky, equipment=equipment_component)
-            elif choice == 'shotgun':
-                #create a shotgun
-                equipment_component = Equipment(slot='right hand', power_bonus=8)
-                item = Object(x, y, 's', 'shotgun', libtcod.sky, equipment=equipment_component)
-            elif choice == 'super shotgun':
-                #create a super shotgun
-                equipment_component = Equipment(slot='right hand', power_bonus=12)
-                item = Object(x, y, 'S', 'super shotgun', libtcod.sky, equipment=equipment_component)
-            elif choice == 'blue armour':
-                #create a shield
-                equipment_component = Equipment(slot='body', defense_bonus=5)
-                item = Object(x, y, 'a', 'Armour', libtcod.blue, equipment=equipment_component)
-            elif choice == 'red armour':
-                #create a shield
-                equipment_component = Equipment(slot='body', defense_bonus=15)
-                item = Object(x, y, 'a', 'Armour', libtcod.red, equipment=equipment_component)
-            elif choice == 'green armour':
-                #create a shield
-                equipment_component = Equipment(slot='body', defense_bonus=25)
-                item = Object(x, y, 'a', 'Armour', libtcod.green, equipment=equipment_component)
- 
-            objects.append(item)
-            item.send_to_back()  #items appear below other objects
-            item.always_visible = True  #items are visible even out-of-FOV, if in an explored area
+            choice = random.choice(items)
+            addItem(choice,x,y)
+
+def addItem(name,x=-1,y=-1,player=True):
+    if name == 'wooden spear':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '|', 'wooden spear', libtcod.dark_sepia, equipment=equipment_component)
+    elif name == 'wooden stick':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '/', 'wooden stick', libtcod.light_sepia, equipment=equipment_component)
+    elif name == 'work axe':
+        equipment_component = Equipment(slot='right hand', power_bonus=2)
+        item = Object(x, y, 'P', 'work axe', libtcod.silver, equipment=equipment_component)
+    elif name == 'wooden boomerang':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '(', 'wooden boomerang', libtcod.light_sepia, equipment=equipment_component)
+    elif name == 'short sword':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '-', 'short sword', libtcod.silver, equipment=equipment_component)
+    elif name == 'long sword':
+        equipment_component = Equipment(slot='right hand', power_bonus=2)
+        item = Object(x, y, '-', 'long sword', libtcod.silver, equipment=equipment_component)
+    elif name == 'leather armour':
+        equipment_component = Equipment(slot='body', defense_bonus=2)
+        item = Object(x, y, 'a', 'leather armour', libtcod.sepia, equipment=equipment_component)
+    elif name == 'metal armour':
+        equipment_component = Equipment(slot='body', defense_bonus=3)
+        item = Object(x, y, 'a', 'metal armour', libtcod.silver, equipment=equipment_component)
+    elif name == 'bag':
+        equipment_component = Equipment(slot='right hand', capacity=3)
+        item = Object(x, y, '#', 'plastic bag', libtcod.white, equipment=equipment_component)
+    elif name == 'backpack':
+        if random.randint(0,3) > 2:
+            equipment_component = Equipment(slot='back', capacity=5)
+            item = Object(x, y, '#', 'fancy backpack', libtcod.white, equipment=equipment_component)
+        else:
+            equipment_component = Equipment(slot='back', capacity=4)
+            item = Object(x, y, '#', 'ugly backpack', libtcod.white, equipment=equipment_component)
+    elif name == 'hat':
+        equipment_component = Equipment(slot='head',defense_bonus=1)
+        nm = random.choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party '])
+        item = Object(x, y, '^', '{}hat'.format(nm), libtcod.white, equipment=equipment_component)
+    elif name == 'elm':
+        equipment_component = Equipment(slot='head',defense_bonus=2)
+        item = Object(x, y, '^', 'metal elm', libtcod.white, equipment=equipment_component)
+    elif name == 'leather hat':
+        equipment_component = Equipment(slot='head')
+        item = Object(x, y, '^', 'leather hat', libtcod.white, equipment=equipment_component)
+    else:
+        equipment_component = Equipment(slot='neck', defense_bonus=0)
+        item = Object(x,y,'*','fashion statement colar', libtcod.yellow, equipment=equipment_component)
+
+    if player:
+        objects.append(item)
+        item.send_to_back()  #items appear below other objects
+        item.always_visible = True  #items are visible even out-of-FOV, if in an explored areas
+    else:
+        return item
+
+def generateName(_max_size = 6):
+    _name = ''
+    for _i_ in range(0,random.randint(2,_max_size)):
+        _name += random.choice(['b','c','d','f','g','h','j','k','l','','m','n','p','r','s','t','v','','w','x','z'])
+        _name += random.choice(['a','e','a','e','i','o','u','y'])
+    
+    return _name
+def addMonster(name,x=-1,y=-1,state='none',returnM=False):
+    if state == 'none':
+        if name.split()[0] in ['low_level','kobold']:
+            state = random.choice(['aggressive','watchfull'])
+        elif name.split()[0] in ['worm','wolf']:
+            state = 'neutral'
+            name = 'worm worm'
+    personal_name = generateName()
+    if x == -1:
+        x = random.randint(0, MAP_WIDTH-1)
+    if y == -1:
+        y = random.randint(0,MAP_HEIGHT-1)
+    if name == 'princess':
+        fighter_component = Fighter(hp=7, defense=20, power=0, xp=0, death_function=monster_death, state='friendly')
+        ai_component = Shopowner()
+        monster = Object(x, y, '@', 'princess shmi', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name == 'farmer':
+        fighter_component = Fighter(hp=6, defense=8, power=1, xp=0, death_function=monster_death, state='friendly')
+        ai_component = Shopowner()
+        monster = Object(x, y, '@', 'farmer {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name in ['old man','wise man']:
+        fighter_component = Fighter(hp=8, defense=9, power=9, xp=0, death_function=monster_death, state='friendly')
+        ai_component = Shopowner()
+        monster = Object(x, y, '@', name, libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name in ['lumberjack','leathersmith','blacksmith','nurse']:
+        fighter_component = Fighter(hp=6, defense=8, power=6, xp=0, death_function=monster_death, state='friendly')
+        ai_component = Shopowner()
+        monster = Object(x, y, '@', '{} {}'.format(name, personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name.split()[1] in ['low_level'] and name.split()[0] in ['kobold']:
+        #create a low level monster
+        fighter_component = Fighter(hp=2, defense=3, power=1, xp=35, death_function=monster_death,state=state)
+        ai_component = BasicMonster()
+        monster = Object(x, y, 'k', 'kobold {}'.format(personal_name), libtcod.light_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name.split()[0] in ['mid_level'] and name.split()[0] in ['kobold']:
+        #create a monster_mid_level
+        fighter_component = Fighter(hp=4, defense=4, power=2, xp=65, death_function=monster_death,state=state)
+        ai_component = BasicMonster()
+        monster = Object(x, y, 'k', 'kobold {}'.format(personal_name), libtcod.red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name.split()[1] in ['champion'] and name.split()[0] in ['kobold']:
+        #create a kobold champion
+        fighter_component = Fighter(hp=6, defense=5, power=5, xp=85, death_function=monster_death,state=state)
+        ai_component = BasicMonster()
+        monster = Object(x, y, 'K', 'kobold champion', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name.split()[0] in ['high_level'] and name.split()[0] in ['kobold']:
+        #create a high_level_monster
+        fighter_component = Fighter(hp=5, defense=4, power=2, xp=85, death_function=monster_death,state=state)
+        ai_component = BasicMonster()
+        monster = Object(x, y, 'k', 'kobold {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    else:
+        fighter_component = Fighter(hp=1, defense=0, power=1, xp=3, death_function=monster_death_no_loot,state='wandering')
+        ai_component = BasicMonster()
+        monster = Object(x, y, '~', 'worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
+
+    if returnM:
+        return monster
+    objects.append(monster)
+    
+def add_dragon():
+    global objects
+    fighter_component = Fighter(hp=20, defense=9, power=8, xp=800, death_function=dragon_death)
+    ai_component = BasicMonster()
+    monster = Object(40, 10, 'O', 'dragon head', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=10, power=0, xp=5, death_function=monster_death)
+    ai_component = Body(monster)
+    monster_body = Object(40,9, '*', 'dragon upper body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
+    ai_component = Body(monster_body)
+    monster_body2 = Object(40,8, '*', 'dragon mid body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
+    ai_component = Body(monster_body)
+    monster_body3 = Object(40,7, '*', 'dragon lower body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=5, power=2, xp=5, death_function=monster_death)
+    ai_component = Body(monster_body)
+    monster_tail = Object(40,8, 'v', 'dragon tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    objects.append(monster)
+    objects.append(monster_body)
+    objects.append(monster_body2)
+    objects.append(monster_body3)
+    objects.append(monster_tail)
+
 
 def nothing():
     """
@@ -1326,92 +2014,6 @@ def nothing():
             map 
                 stuff   
                     """
-
-class BulletAnimation():
-    def __init__(self,startX,startY,endX,endY,type='bullet',frames=10):
-        self.x = startX
-        self.y = startY
-        self.endX = endX
-        self.endY = endY
-        if type=='bullet':
-            self.projectile = '.'
-        elif type=='rocket':
-            self.projectile = '*'
-        else:
-            self.projectile = ''
-        self.frame = 0
-        self.total_frames = frames
-    
-    def step(self):
-        #first clean previous position:
-        self.clear()
-        #then get next position 
-        libtcod.line_init(self.x,self.y,self.endX, self.endY)
-        self.x, self.y = libtcod.line_step()
-        if not is_blocked(self.x,self.y):
-            #advance frame
-            self.frame += 1
-        else:
-            game_animations.remove(self)
-
-        if self.frame == self.total_frames:
-            game_animations.remove(self)
-            #game_animations.append(ExplosionAnim(self.x,self.y))
-        else:
-            self.draw()
-
-    def draw(self):
-        if libtcod.map_is_in_fov(fov_map, self.x, self.y):
-            #set the color and then draw the character that represents this object at its position
-            libtcod.console_set_default_foreground(con, libtcod.white)
-            libtcod.console_put_char(con, self.x, self.y, self.projectile, libtcod.BKGND_NONE)
-
-    def clear(self):
-        libtcod.console_put_char(con, self.x, self.y, ' ', libtcod.BKGND_NONE)
-
-class ExplosionAnim():
-    #              0                1               2           3          4
-    colors = [libtcod.yellow,libtcod.red,libtcod.orange,libtcod.yellow,libtcod.yellow]
-    def __init__(self, x, y, type='regular'):
-        self.x = x
-        self.y = y
-        if type == 'regular':
-            self.radius = 2
-            self.max_frames = 3
-        else:
-            self.radius = 3
-            self.max_frames = 4
-        self.frame = 0
-    
-    def step(self):
-        if self.frame < self.max_frames:
-            if self.frame == 0:
-                #draw only at x,y :
-                self.draw(self.x,self.y,'*',ExplosionAnim.colors[self.frame])
-            if self.frame >= 1:
-                #draw at x,y ; x+1,y ; x-1, y ; x,y-1 ; x,y+1
-                self.draw(self.x,self.y,'*', ExplosionAnim.colors[self.frame])
-                self.draw(self.x-1,self.y,'*', ExplosionAnim.colors[self.frame-1])
-                self.draw(self.x+1,self.y,'*', ExplosionAnim.colors[self.frame-1])
-                self.draw(self.x,self.y-1,'*', ExplosionAnim.colors[self.frame-1])
-                self.draw(self.x,self.y+1,'*', ExplosionAnim.colors[self.frame-1])
-            if self.frame >= 2:
-                #draw at x-1,y-1 ; x-1, y+1 ; x+1, y-1 ; x+1 , y+1
-                self.draw(self.x-1,self.y-1,'*', ExplosionAnim.colors[self.frame])
-                self.draw(self.x-1,self.y+1,'*', ExplosionAnim.colors[self.frame])
-                self.draw(self.x+1,self.y+1,'*', ExplosionAnim.colors[self.frame])
-                self.draw(self.x+1,self.y-1,'*', ExplosionAnim.colors[self.frame])
-            
-            self.frame += 1
-        else:
-            game_animations.remove(self)
-            
-    def draw(self,x,y,char,color):
-        if libtcod.map_is_in_fov(fov_map, self.x, self.y):
-            libtcod.console_set_default_foreground(con, color)
-            libtcod.console_put_char(con, x, y, char, libtcod.BKGND_NONE)   
-
-
 
 #horizontal_menu
 def horizontal_menu(header, options, width, value = 0, x_offset = 0, y_offset = 0, _max=0,_min=0):
@@ -1491,7 +2093,7 @@ def arrow_menu(header, options, width, selection = 0, x_offset = 0, y_offset = 0
     y = header_height
     letter_index = ord('a')
     line_num = 0
-
+    libtcod.console_set_default_background(window, libtcod.black)
     libtcod.console_set_default_foreground(window, libtcod.white)
     libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
 
@@ -1505,10 +2107,12 @@ def arrow_menu(header, options, width, selection = 0, x_offset = 0, y_offset = 0
         line_num = 0
         for option_text in options:
             if line_num == selection:
-                text = ' @ '  + option_text + ' @ '
+                libtcod.console_set_default_foreground(window, libtcod.yellow)
+                text = '+--'  + option_text+'  '
                 #print text
             else:
-                text = '    ' + option_text + '    '
+                libtcod.console_set_default_foreground(window, libtcod.silver)
+                text = ' ' + option_text+'      '
             libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
             y += 1
             letter_index += 1
@@ -1525,13 +2129,13 @@ def arrow_menu(header, options, width, selection = 0, x_offset = 0, y_offset = 0
         key = libtcod.console_wait_for_keypress(True)
 
         key_char = chr(key.c)
-        if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_LEFT or key_char in ['w','W','A','a']:
+        if key.vk in [libtcod.KEY_UP,libtcod.KEY_LEFT,libtcod.KEY_KP8, libtcod.KEY_KP4] or key_char in ['w','W','A','a']:
             selection-=1
-        elif key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_RIGHT or key_char in ['s','S','D','d']:
+        elif key.vk in [libtcod.KEY_DOWN,libtcod.KEY_RIGHT,libtcod.KEY_KP2, libtcod.KEY_KP6] or key_char in ['s','S','D','d']:
             selection+=1
-        elif key.vk == libtcod.KEY_ENTER or key_char in ['e','E','f','F']:
+        elif key.vk in [libtcod.KEY_ENTER,libtcod.KEY_KP7] or key_char in ['e','E','f','F']:
             return selection
-        elif key.vk == libtcod.KEY_ESCAPE or key_char in ['q','Q','c','C']:
+        elif key.vk in [libtcod.KEY_ESCAPE,libtcod.KEY_KP5,libtcod.KEY_KP1] or key_char in ['q','Q','c','C']:
             return -1
 
 
@@ -1540,34 +2144,36 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     bar_width = int(float(value) / maximum * total_width)
  
     #render the background first
-    libtcod.console_set_default_background(panel, back_color)
-    libtcod.console_rect(panel, x, y, total_width, 1, False, libtcod.BKGND_SCREEN)
+    libtcod.console_set_default_background(panel_v, back_color)
+    libtcod.console_rect(panel_v, x, y, total_width, 1, False, libtcod.BKGND_SCREEN)
  
     #now render the bar on top
-    libtcod.console_set_default_background(panel, bar_color)
+    libtcod.console_set_default_background(panel_v, bar_color)
     if bar_width > 0:
-        libtcod.console_rect(panel, x, y, bar_width, 1, False, libtcod.BKGND_SCREEN)
+        libtcod.console_rect(panel_v, x, y, bar_width, 1, False, libtcod.BKGND_SCREEN)
  
     #finally, some centered text with the values
-    libtcod.console_set_default_foreground(panel, libtcod.white)
-    libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
+    libtcod.console_set_default_foreground(panel_v, libtcod.white)
+    libtcod.console_print_ex(panel_v, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
                                  name + ':' + str(value) + '/' + str(maximum))
  
 #def get_names_under_mouse():
 def get_names(x,y):
     global mouse
     #return a string with the names of all objects under the mouse
- 
+    
     #(x, y) = (mouse.cx, mouse.cy)
  
     #create a list with the names of all objects at the mouse's coordinates and in FOV
     names = [obj.name for obj in objects
-             if obj.x == x and obj.y == y and obj.name != 'dot']
+             if obj.x == x and obj.y == y and obj.name != 'dot' and obj.name != 'stairs']
     if len(names) < 1:
-    	names = map[x][y].terrain
- 
-    names = ', '.join(names)  #join the names, separated by commas
-    return names.capitalize()
+        names = map[x][y].terrain
+    if names in ['<','>'] and dungeon_level == 0:
+        names = get_dungeon_name(x,y)
+    else:
+        names = ', '.join(names)  #join the names, separated by commas
+    return names
 
 def move_camera(target_x, target_y):
     global camera_x, camera_y, fov_recompute
@@ -1596,17 +2202,21 @@ def to_camera_coordinates(x, y):
     return (x, y)
 
 
-def get_square(width,height,i_x,i_y):
+def get_square(width,height,i_x,i_y,is_dungeon=False):
 
 
     str = '({},{})->({},{})'.format(i_x,i_y,i_x+width,i_y+height)
-    count = [0,0,0,0,0,0,0,0]
+    count = [0,0,0,0,0,0,0,0,0]
     
     for y in range(i_y,i_y+height):
         for x in range(i_x,i_x+width):
             tile = map[x][y]
             if player.x == x and player.y == y:
                 return 7
+            if is_dungeon and tile.terrain in ['<']:
+                return 8
+            elif is_dungeon and tile.terrain in ['>']:
+                return 9
             if tile.terrain == CHAR_TALL_GRASS:
                 count[0]+=1
             elif tile.terrain == CHAR_LONG_GRASS:
@@ -1633,20 +2243,25 @@ def get_square(width,height,i_x,i_y):
     if _max != 0:
         t = count.index(_max)
     else:
-        t = 3
+        t = count.index(max(count))
     return t
 
 def get_terrains(width,height):
-    global map
+    global map, dungeon_level
+
+    if dungeon_level > 0:
+        is_dungeon = True
+    else:
+        is_dungeon = False
     mmap = []
     #        ; ' , . # T ~ @
-    _ter_ = [CHAR_TALL_GRASS,CHAR_LONG_GRASS,CHAR_GRASS,CHAR_DIRT,CHAR_MOUNTAIN,CHAR_FOREST,CHAR_LAKE,'@']
+    _ter_ = [CHAR_TALL_GRASS,CHAR_LONG_GRASS,CHAR_GRASS,CHAR_DIRT,CHAR_MOUNTAIN,CHAR_FOREST,CHAR_LAKE,'@','>','<']
     mmap_x = 0
     mmap_y = 0
 
     while (mmap_y < MAP_HEIGHT):
         while(mmap_x < MAP_WIDTH):
-            t = get_square(10,10,mmap_x,mmap_y)
+            t = get_square(10,10,mmap_x,mmap_y,is_dungeon)
             til = _ter_[t]  ##Tile(True,_ter_[t])
             mmap.append(til)
             mmap_x += 10
@@ -1655,10 +2270,26 @@ def get_terrains(width,height):
         
     return mmap
 
+def get_color(t):
+        if t == CHAR_MOUNTAIN or t == CHAR_DIRT:
+            color = libtcod.light_sepia
+        elif t == CHAR_LAKE:
+            color = libtcod.blue
+        elif t == CHAR_STAIRS:
+            color = libtcod.light_yellow
+        elif t == CHAR_TALL_GRASS or t == CHAR_FOREST:
+            color = libtcod.darker_green
+        elif t == CHAR_LONG_GRASS:
+            color = libtcod.dark_green
+        elif t == '@':
+            color = libtcod.white
+        else:
+            color = libtcod.green
+        return color
+
 def mini_map(stop = True):
     width = int(MAP_WIDTH / 10)
     height = int(MAP_HEIGHT / 10)
-    print "mapa : {}x{}, dividido em chunks de {} larg, {} alt".format(MAP_WIDTH,MAP_HEIGHT,width,height)
 
     window = libtcod.console_new(width, height)
  
@@ -1675,11 +2306,11 @@ def mini_map(stop = True):
             color = libtcod.blue
         elif t == CHAR_STAIRS:
             color = libtcod.light_yellow
-        elif t == CHAR_TALL_GRASS:
+        elif t == CHAR_TALL_GRASS or t == CHAR_FOREST:
             color = libtcod.darker_green
         elif t == CHAR_LONG_GRASS:
             color = libtcod.dark_green
-        elif t == '@':
+        elif t in ['@','<']:
             color = libtcod.white
         else:
             color = libtcod.green
@@ -1692,11 +2323,11 @@ def mini_map(stop = True):
             st+=' \n'
             x=0
             y+=1
-    print st
+    #print st
 
     #blit the contents of "window" to the root console
-    x = SCREEN_WIDTH - (width + 1)
-    y = 1
+    x = int(SCREEN_WIDTH / 3)
+    y = int(SCREEN_HEIGHT / 3)
     libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
  
     #present the root console to the player and wait for a key-press
@@ -1706,11 +2337,9 @@ def mini_map(stop = True):
  
         if key.vk == libtcod.KEY_ENTER and key.lalt:  #(special case) Alt+Enter: toggle fullscreen
             libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen)
- 
-    #convert the ASCII code to an index; if it corresponds to an option, return it
 
 def render_all():
-    global fov_map, color_dark_wall, color_light_wall
+    global fov_map, color_dark_wall, color_light_wall, dungeon_name
     global color_dark_ground, color_light_ground
     global game_animations,notifications
     global fov_recompute
@@ -1757,10 +2386,10 @@ def render_all():
     #draw all objects in the list, except the player. we want it to
     #always appear over all other objects! so it's drawn later.
     for o in objects:
-    	if o.name == 'dot':
-    		dot_x = o.x
-    		dot_y = o.y
-    		o.draw()
+        if o.name == 'dot':
+            dot_x = o.x
+            dot_y = o.y
+            o.draw()
     
     for object in objects:
         if object != player and not object.name == 'dot':
@@ -1775,15 +2404,35 @@ def render_all():
     #    #sleep(0.1)
         anim.step()
 
-    mini_map(False)
-        
  
     #blit the contents of "con" to the root console
     libtcod.console_blit(con, 0, 0, MAP_WIDTH, MAP_HEIGHT, 0, 0, 0)
  
- 
+    #prepare to render the GUI v panel
+    libtcod.console_set_default_background(panel_v, libtcod.black)
+    libtcod.console_clear(panel_v)
+
+    width = int(MAP_WIDTH / 10)
+    height = int(MAP_HEIGHT / 10)
+    mmap = get_terrains(width, height)
+    st=' '
+    x = 0
+    y = 0
+    st=' '
+    for t in mmap:
+        color = get_color(t)
+        libtcod.console_set_default_foreground(panel_v, color)
+        libtcod.console_print_ex(panel_v, x+1, y, libtcod.BKGND_DARKEN, libtcod.LEFT, t)
+        st += '{}'.format(t)
+        x+=1
+        if x >= width :
+            st+=' \n'
+            x=0
+            y+=1
+
     #prepare to render the GUI panel
     libtcod.console_set_default_background(panel, libtcod.black)
+    libtcod.console_set_default_foreground(panel_v, libtcod.white)
     libtcod.console_clear(panel)
  
     #print the game messages, one line at a time
@@ -1793,14 +2442,50 @@ def render_all():
         libtcod.console_print_ex(panel, MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT,line)
         y += 1
  
-    #show the player's stats
-    render_bar(BAR_WIDTH+10, 1, BAR_WIDTH, '+', player.fighter.hp, player.fighter.max_hp,
-               libtcod.light_red, libtcod.darker_red)
-    render_bar(1, 1, BAR_WIDTH, '$ ', player.fighter.purse, 200,
-               libtcod.darker_green, libtcod.black)
+    #libtcod.console_print_ex(panel, )
+    libtcod.console_print_ex(panel_v, 1, 10, libtcod.BKGND_NONE, libtcod.LEFT, '----------')
+    hp = player.fighter.hp
+    if hp < 7:
+        __color = HEALTH_COLOR[hp]
+    else:
+        __color = libtcod.white
+    libtcod.console_set_default_foreground(panel_v, __color)
+    libtcod.console_print_ex(panel_v, 1, 11, libtcod.BKGND_NONE, libtcod.LEFT, ' [{}]'.format(HEALTH[hp]))
+    libtcod.console_set_default_foreground(panel_v, libtcod.white)
+    libtcod.console_print_ex(panel_v, 1, 13, libtcod.BKGND_NONE, libtcod.LEFT, dungeon_name.split()[0])
+    libtcod.console_print_ex(panel_v, 1, 14, libtcod.BKGND_NONE, libtcod.LEFT, dungeon_name.split()[1])
+
+    libtcod.console_print_ex(panel_v, 1, 16, libtcod.BKGND_NONE, libtcod.LEFT, 'floor  ['+str(dungeon_level)+']')
+    libtcod.console_print_ex(panel_v, 1, 17, libtcod.BKGND_NONE, libtcod.LEFT, 'compass['+player.fighter.orientation+']')
+    libtcod.console_print_ex(panel_v, 1, 18, libtcod.BKGND_NONE, libtcod.LEFT, '$['+str(player.fighter.purse)+']')
+
+    y = 20
+
+    rhand = get_equipped_in_slot('right hand')
+    if rhand is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'r[{}]'.format(rhand.owner.name.split(' ')[1]))
+        y+=1
+    lhand = get_equipped_in_slot('left hand')
+    if lhand is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'l[{}]'.format(lhand.owner.name.split(' ')[1]))
+        y+=1
+    head = get_equipped_in_slot('head')
+    if head is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'h[{}]'.format(head.owner.name.split(' ')[0]))
+        y+=1
+    neck = get_equipped_in_slot('neck')
+    if neck is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'n[{}]'.format(neck.owner.name.split(' ')[1]))
+        y+=1
+    back = get_equipped_in_slot('back')
+    if back is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'b[{}]'.format(back.owner.name.split(' ')[1]))
+        y+=1
+    body = get_equipped_in_slot('body')
+    if body is not None:
+        libtcod.console_print_ex(panel_v, 1, y, libtcod.BKGND_NONE, libtcod.LEFT, 'b[{}]'.format(body.owner.name.split(' ')[1]))
     
-    libtcod.console_print_ex(panel, 1, 4, libtcod.BKGND_NONE, libtcod.LEFT, 'floor '+str(dungeon_level))
-    libtcod.console_print_ex(panel, BAR_WIDTH, 4, libtcod.BKGND_NONE, libtcod.LEFT, player.fighter.orientation)
+    #libtcod.console_print_ex(panel_v, 1, 17, libtcod.BKGND_NONE, libtcod.LEFT, 'lHand[{}]'.format(get_equipped_in_slot('right hand'))
  
     #display names of objects under the mouse
     libtcod.console_set_default_foreground(panel, libtcod.light_gray)
@@ -1808,6 +2493,7 @@ def render_all():
  
     #blit the contents of "panel" to the root console
     libtcod.console_blit(panel, 0, 0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
+    libtcod.console_blit(panel_v, 0, 0, SCREEN_WIDTH - CAMERA_WIDTH, SCREEN_HEIGHT - PANEL_HEIGHT, 0, CAMERA_WIDTH, 0)
  
 def message(new_msg, color = libtcod.white):
     #split the message if necessary, among multiple lines
@@ -1822,12 +2508,20 @@ def message(new_msg, color = libtcod.white):
         game_msgs.append( (line, color) )
 
 def player_move_or_attack(dx, dy, move=True):
-    global fov_recompute
- 
+    global fov_recompute, notifications
+    
     #the coordinates the player is moving to/attacking
     x = player.x + dx
     y = player.y + dy
- 
+    if x >= MAP_WIDTH - 1:
+        dx = -1
+    elif x < 0:
+        dx = 1
+    if y >= MAP_HEIGHT - 1:
+        dy = -1
+    elif y < 0:
+        dy = 1
+
     #try to find an attackable object there
     target = None
     for object in objects:
@@ -1841,14 +2535,12 @@ def player_move_or_attack(dx, dy, move=True):
         return True
     
     if move:
-    	player.move(dx, dy)
-    	fov_recompute = True
+        player.move(dx, dy)
+        fov_recompute = True
 
     return False
   
 def menu(header, options, width,offset=0):
-    if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
- 
     #calculate total height for the header (after auto-wrap) and one line per option
     header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
     if header == '':
@@ -1860,6 +2552,9 @@ def menu(header, options, width,offset=0):
  
     #print the header, with auto-wrap
     libtcod.console_set_default_foreground(window, libtcod.white)
+    libtcod.console_set_default_background(window, libtcod.black)
+
+    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_SET, libtcod.LEFT, header)
     libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
  
     #print all the options
@@ -1901,63 +2596,50 @@ def inventory_menu(header):
                 text = text + ' (on ' + item.equipment.slot + ')'
             options.append(text)
  
-    index = arrow_menu(header, options, INVENTORY_WIDTH,0,0,0)
+    index = arrow_menu(header, options, INVENTORY_WIDTH,0,4,1)
     #index = menu(header, options, INVENTORY_WIDTH)
- 
+    render_all()
     #if an item was chosen, return it
     if index is -1 or len(inventory) == 0: return None
     return inventory[index].item
  
 def msgbox(text, width=50):
-    menu(text, [], width)  #use menu() as a sort of "message box"
+    menu(text, [], width,offset=-3)  #use menu() as a sort of "message box"
  
 def handle_keys():
-    global key,isRealTime, mouse, oldxx,oldyy,oldPxx,oldPyy,notifications
+    global key,isRealTime, mouse, oldxx,oldyy,oldPxx,oldPyy,notifications, inventory
  
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         #Alt+Enter: toggle fullscreen
         libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
-        
-    elif key.vk == libtcod.KEY_ESCAPE:
-        return 'exit'  #exit game
- 
+    if key.vk == libtcod.KEY_ESCAPE:
+        if arrow_menu('really quit?',['YES','nah'],15,30,14) == 0:
+            opt = -1
+            return 'exit'
+        else:
+            return 'nop'
+
     if game_state == 'playing':
         #movement keys
         if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8 or chr(key.c) == 'w':
             player_move_or_attack(0, -1)
-            #else:
             player.fighter.orientation = NORTH
-
         elif key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_KP2 or chr(key.c) == 's':
-            #if player.fighter.orientation == SOUTH:
             player_move_or_attack(0, 1)
-            #else:
             player.fighter.orientation = SOUTH
         elif key.vk == libtcod.KEY_LEFT or key.vk == libtcod.KEY_KP4 or chr(key.c) == 'a':
-            #if player.fighter.orientation == WEST:
             player_move_or_attack(-1, 0)
-            #else:
             player.fighter.orientation = WEST
         elif key.vk == libtcod.KEY_RIGHT or key.vk == libtcod.KEY_KP6 or chr(key.c) == 'd':
-            #if player.fighter.orientation == EAST:
             player_move_or_attack(1, 0)
-            #else:
             player.fighter.orientation = EAST
-        elif key.vk == libtcod.KEY_HOME or key.vk == libtcod.KEY_KP7:
-            player_move_or_attack(-1, -1)
-        elif key.vk == libtcod.KEY_PAGEUP or key.vk == libtcod.KEY_KP9:
-            player_move_or_attack(1, -1)
-        elif key.vk == libtcod.KEY_END or key.vk == libtcod.KEY_KP1:
-            player_move_or_attack(-1, 1)
-        elif key.vk == libtcod.KEY_PAGEDOWN or key.vk == libtcod.KEY_KP3:
-            player_move_or_attack(1, 1)
-        elif key.vk == libtcod.KEY_KP5:
+        elif key.vk == libtcod.KEY_KP5 or chr(key.c) == ' ':
             pass  #do nothing ie wait for the monster to come to you
         else:
             #test for other keys
             key_char = chr(key.c)
  
-            if key_char in ['e','E']:
+            if key_char in ['e','E'] or key.vk == libtcod.KEY_KP7:
                 #pick up an item
                 _x, _y = player.fighter.getTargetTile()
                 for object in objects:  #look for an item in the player's tile
@@ -1968,193 +2650,436 @@ def handle_keys():
                         elif object.name == 'money':
                             player.fighter.purse += 1 
                             objects.remove(object)
-                            print "money : [{}]".format(player.fighter.purse)
-                        elif player.x == stairs.x and player.y == stairs.y:
-                            next_level()
+                        #elif player.x == stairs.x and player.y == stairs.y:
+                        #    next_level(dungeon_level,CHAR_MOUNTAIN,up=False)
                         elif map[player.x][player.y].terrain in ['>','<',CHAR_STAIRS]:
                             t = CHAR_MOUNTAIN
                             for x in range(player.x-2,player.x+2):
-                                for y in range(player.y-1,player.y+1):
-                                    if map[x][y].terrain not in [CHAR_GRASS,CHAR_LONG_GRASS,CHAR_TALL_GRASS,'<','>']:
+                                for y in range(player.y-2,player.y+2):
+                                    if map[x][y].terrain not in [CHAR_GRASS,CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_DIRT,'<','>']:
                                         t = map[x][y].terrain
                                         break     
-                            next_level(True,t)
+                            if map[player.x][player.y].terrain == '>':
+                                if dungeon_level > 0:
+                                    nm = dungeon_name
+                                else:
+                                    nm = get_dungeon_name(player.x,player.y)
+                                next_level(dungeon_level,up=True,name=nm)
+                            else:
+                                if dungeon_level > 0:
+                                    nm = dungeon_name
+                                else:
+                                    nm = get_dungeon_name(player.x,player.y)
+                                next_level(dungeon_level,t,up=False,name=nm)
+                                key.vk == libtcod.KEY_KP5
                             break
                     elif object.x == _x and object.y == _y:
                         if object.fighter:
-                            object.fighter.talk(dialogs.getValue(object.char, 0))
+                            if object.name.split()[0] in ['blacksmith','nurse','leathersmith','lumberjack','old','wise']:
+                                object.ai.sell_stuff()
+                            else:
+                                object.fighter.talk(dialogs.getValue(object.char, object.fighter.state))
                         elif object.item:
                             object.item.pick_up()
                             break
                         elif object.name == 'money':
                             player.fighter.purse += 1 
                             objects.remove(object)
-                            print "money : [{}]".format(player.fighter.purse)
- 
-            if key_char == 'c':
-                opt = 5
-                while opt > 0:
-                    opt = arrow_menu('--game menu--',['mini map','inventory','drop stuff','char info','quit'],22,0,2,2)
-                    if opt == 0:
-                        mini_map()
-                        continue
-                    elif opt == 1:
-                        chosen_item = inventory_menu('use / equip \n select with action, cancel with menu.\n')
-                        if chosen_item is not None:
-                            chosen_item.use()
-                    elif opt == 2:
-                        chosen_item = inventory_menu('drop \n select with action, cancel with menu.\n')
-                        if chosen_item is not None:
-                            chosen_item.drop()
-                    elif opt == 3:
-                        level_up_xp = LEVEL_UP_BASE + player.level * LEVEL_UP_FACTOR
-                        msgbox('Character Information\n\nLevel: ' + str(player.level) + '\nExperience: ' + str(player.fighter.xp) +
-                           '\nExperience to level up: ' + str(level_up_xp) + '\n\nMaximum HP: ' + str(player.fighter.max_hp) +
-                           '\nAttack: ' + str(player.fighter.power) + '\nDefense: ' + str(player.fighter.defense), CHARACTER_SCREEN_WIDTH)
-                    elif opt == 4:
-                        opt = -1
-                        return 'exit'
+            if key_char in ['c','C'] or key.vk == libtcod.KEY_KP3 or key.vk == libtcod.KEY_ESCAPE:
+                return in_game_menu()
+            if key_char in ['q','Q'] or key.vk == libtcod.KEY_KP1:
+                curr_weap = get_equipped_in_slot('right hand')
+                weap_2 = get_equipped_in_slot('left hand')
+                if curr_weap is None or curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in ['spear','bow','boomerang','stick']:
+                    if weap_2 is not None and weap_2.owner.name.split(' ')[1] in ['spear','bow','boomerang','stick']:
+                        curr_weap = weap_2
+                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['spear','bow','boomerang','stick']:
+                    _boomerang_ = (curr_weap.owner.name.split(' ')[1] in ['boomerang'])
+                    fs = []
+                    for o in objects:
+                        if (o.x == player.x or o.y == player.y) and o.fighter:
+                             fs.append(o)
+                    #fire in the hole!
+                    _x = player.x
+                    _y = player.y
+                    _break = False
 
-    
-            if key_char == 'i':
-                #show the inventory; if an item is selected, use it
-                chosen_item = inventory_menu('use / equip \n select with action, cancel with menu.\n')
-                if chosen_item is not None:
-                    chosen_item.use()
-
-            #if key_char == 'd':
-                #show the inventory; if an item is selected, drop it
-                #chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
-                #if chosen_item is not None:
-                #    chosen_item.drop()
- 
-            if key_char == 'q':
-                fs = []
-                for o in objects:
-                    if (o.x == player.x or o.y == player.y) and o.fighter:
-                        fs.append(o)
-                #fire in the hole!
-                _x = player.x
-                _y = player.y
-                if player.fighter.orientation == NORTH:
-                    print 'shooting N'
-                    for _y in range(player.y-1,0, -1):
-                        for f in fs:
-                            if f.x == _x and f.y == _y:
-                                notifications.append(Notif('*',3,_x,_y))
-                                f.fighter.take_damage(10)
+                    dmg = curr_weap.power_bonus 
+                    if not _boomerang_:
+                        dmg+=1
+                    fit =  None
+                    endx = 0
+                    endy = 0 
+                    if player.fighter.orientation == NORTH:
+                        for _y in range(player.y-1,0, -1):
+                            if map[player.x][_y].blocked or _break:
+                                endx = _x
+                                endy = _y+1
                                 break
-                        notifications.append(Notif('|',3,player.x,_y))
-                elif player.fighter.orientation == EAST:
-                    print "shooting E"
-                    for _x in range(player.x+1, MAP_WIDTH):
-                        for f in fs:
-                            if f.x == _x and f.y == _y:
-                                notifications.append(Notif('*',3,_x,_y))
-                                f.fighter.take_damage(10)
+                            for f in fs:
+                                if f.x == _x and f.y == _y:
+                                    fit = f
+                                    endx = _x
+                                    endy = _y+1
+                                    _break = True
+                                    break
+                            if _boomerang_:
+                                notifications.append(Notif('(',2,player.x,_y))
+                            else:
+                                notifications.append(Notif('|',3,player.x,_y))
+                        if _boomerang_:
+                            for _y in range(endy,player.y):
+                                notifications.append(Notif(')',3,_x,player.y))
+
+                    elif player.fighter.orientation == EAST:
+                        for _x in range(player.x+1, MAP_WIDTH):
+                            if map[_x][player.y].blocked or _break:
+                                endx = _x-1
+                                endy = _y
                                 break
-                        notifications.append(Notif('-',3,_x,player.y))
-                elif player.fighter.orientation == SOUTH:
-                    print "shooting S"
-                    for _y in range(player.y+1, MAP_HEIGHT):
-                        for f in fs:
-                            if f.x == _x and f.y == _y:
-                                notifications.append(Notif('*',3,_x,_y))
-                                f.fighter.take_damage(10)
+                            for f in fs:
+                                if f.x == _x and f.y == _y:
+                                    fit = f
+                                    endx = _x-1
+                                    endy = _y
+                                    _break = True
+                                    break
+                            if _boomerang_:
+                                notifications.append(Notif('(',2,_x,player.y))
+                            else:
+                                notifications.append(Notif('-',3,_x,player.y))
+                        if _boomerang_:
+                            for _x in range(endx,player.x,-1):
+                                notifications.append(Notif(')',3,_x,player.y))
+                    elif player.fighter.orientation == SOUTH:
+                        for _y in range(player.y+1, MAP_HEIGHT):
+                            if map[player.x][_y].blocked or _break:
+                                endx = _x
+                                endy = _y-1
+                                break
+                            for f in fs:
+                                if f.x == _x and f.y == _y:
+                                    fit = f
+                                    endx = _x
+                                    endy = _y-1
+                                    _break = True
+                                    break
+                            if _boomerang_:
+                                notifications.append(Notif(')',2,player.x,_y))
+                            else:
+                                notifications.append(Notif('|',3,player.x,_y))
+
+                        if _boomerang_:
+                            for _y in range(endy,player.y,-1):
+                                notifications.append(Notif('(',3,_x,player.y))
+                    elif player.fighter.orientation == WEST:
+                        for _x in range(player.x-1,0,-1):
+                            if map[_x][player.y].blocked or _break:
+                                endx = _x+1
+                                endy = _y
                                 break
 
-                        notifications.append(Notif('|',3,player.x,_y))
-                elif player.fighter.orientation == WEST:
-                    print "shooting W"
-                    for _x in range(player.x-1,0,-1):
-                        for f in fs:
-                            if f.x == _x and f.y == _y:
-                                notifications.append(Notif('*',3,_x,_y))
-                                f.fighter.take_damage(10)
-                                break
-
-                        notifications.append(Notif('-',3,_x,player.y))
-          
-            if key_char == '<':
-                #go down stairs, if the player is on them
-                if map[player.x][player.y].type in ['>','<']:
-                    next_level()
-            if key_char == 'm':
-                mini_map()
-            if chr(key.c) == 'f' or chr(key.c) == 'F':
-                if player.fighter.orientation == EAST:
-                    notifications.append(Notif('/',2,player.x+1,player.y-1))
-                    notifications.append(Notif('-',3,player.x+1,player.y))
-                    notifications.append(Notif('\\',4,player.x+1,player.y+1))
-                    if not player_move_or_attack(1, 0,False) and not player_move_or_attack(1, -1,False) and not player_move_or_attack(1, 1,False):
-                        swing_sword(player.x+1,player.y-1)
-                        swing_sword(player.x+1,player.y+1)
-                        return 'attack'
+                            for f in fs:
+                                if f.x == _x and f.y == _y:
+                                    fit = f
+                                    endx = _x+1
+                                    endy = _y
+                                    _break = True
+                                    break
+                            if _boomerang_:
+                                notifications.append(Notif(')',2,_x,player.y))
+                            else:
+                                notifications.append(Notif('-',3,_x,player.y))
+                        if _boomerang_:
+                            for _x in range(player.x,endx-1):
+                                notifications.append(Notif('(',3,_x,player.y))
+                    if not fit is None:
+                        notifications.append(Notif('*',5,_x,_y))
+                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick']:
+                            message('you threw your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
+                            i_name = curr_weap.owner.name
+                            for it in inventory:
+                                if it.name == i_name:
+                                    it.item.drop(endx,endy)
+                                    break;
+                        else:
+                            message('you shot your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
+                        fit.fighter.take_damage(dmg)
                     else:
-                        return 'nop'
-                elif player.fighter.orientation == NORTH:
-                    notifications.append(Notif('\\',2,player.x-1,player.y-1))
-                    notifications.append(Notif('|',3,player.x,player.y-1))
-                    notifications.append(Notif('/',4,player.x+1,player.y-1))
-                    if not player_move_or_attack(1, -1,False) and not player_move_or_attack(-1, -1,False) and not player_move_or_attack(0, -1,False):
-                        swing_sword(player.x-1,player.y-1)
-                        swing_sword(player.x+1,player.y-1)
-                        return 'attack'
-                    else:
-                        return 'nop'
-                elif player.fighter.orientation == WEST:
-                    notifications.append(Notif('\\',2,player.x-1,player.y-1))
-                    notifications.append(Notif('-',3,player.x-1,player.y))
-                    notifications.append(Notif('/',4,player.x-1,player.y+1))
-                    if not player_move_or_attack(-1, 0,False) and not player_move_or_attack(-1, -1,False) and not player_move_or_attack(-1, 1,False):  
-                        swing_sword(player.x-1,player.y-1)
-                        swing_sword(player.x-1,player.y+1)
-                        return 'attack'
-                    else:
-                        return 'nop'
-                elif player.fighter.orientation == SOUTH:
-                    notifications.append(Notif('/',2,player.x-1,player.y+1))
-                    notifications.append(Notif('|',3,player.x,player.y+1))
-                    notifications.append(Notif('\\',4,player.x+1,player.y+1))
+                        message('you threw your {} at nothing'.format(curr_weap.owner.name))
+                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick']:
+                            i_name = curr_weap.owner.name
+                            for it in inventory:
+                                if it.name == i_name:
+                                    it.item.drop(endx,endy)
+                                    break;
 
-                    if not player_move_or_attack(0, 1,False) and not player_move_or_attack(+1, 1,False) and not player_move_or_attack(-1, 1,False):
-                        swing_sword(player.x-1,player.y+1)
-                        swing_sword(player.x+1,player.y+1)
-                        return 'attack'
-                    else:
+            if key_char in ['f','F'] or key.vk == libtcod.KEY_KP9:
+                curr_weap = get_equipped_in_slot('right hand')
+                weap_2 = get_equipped_in_slot('left hand')
+                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] == 'bag':
+                    orien = player.fighter.orientation
+                    strangle = False
+                    for obj in objects:
+                        tx,ty = player.fighter.getTargetTile()
+                        if obj.fighter and obj.x == tx and obj.y == ty:
+                            f = obj
+                            strangle = True
+                            dmg = player.fighter.power + 1
+                            break
+                    if not strangle:
                         return 'nop'
+                    if orien == EAST:
+                        if player_move_or_attack(1, 0,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                    elif orien == WEST:
+                        if player_move_or_attack(-1, 0,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                    elif orien == NORTH:
+                        if player_move_or_attack(0, -1,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                    elif orien == SOUTH:
+                        if player_move_or_attack(0, 1,False):
+                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                if curr_weap is None and weap_2 is not None or (curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in ['sword','axe','stick'] and weap_2 is not None): 
+                    if weap_2.owner.name.split(' ')[1] in ['sword','axe','stick']:
+                        curr_weap = weap_2
+                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['sword','axe','stick']:
+                    if player.fighter.orientation == EAST:
+                        notifications.append(Notif('/',2,player.x+1,player.y-1))
+                        notifications.append(Notif('-',3,player.x+1,player.y))
+                        notifications.append(Notif('\\',4,player.x+1,player.y+1))
+                        if not player_move_or_attack(1, 0,False) and not player_move_or_attack(1, -1,False) and not player_move_or_attack(1, 1,False):
+                            swing_sword(player.x+1,player.y-1)
+                            swing_sword(player.x+1,player.y+1)
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == NORTH:
+                        notifications.append(Notif('\\',2,player.x-1,player.y-1))
+                        notifications.append(Notif('|',3,player.x,player.y-1))
+                        notifications.append(Notif('/',4,player.x+1,player.y-1))
+                        if not player_move_or_attack(1, -1,False) and not player_move_or_attack(-1, -1,False) and not player_move_or_attack(0, -1,False):
+                            swing_sword(player.x-1,player.y-1)
+                            swing_sword(player.x+1,player.y-1)
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == WEST:
+                        notifications.append(Notif('\\',2,player.x-1,player.y-1))
+                        notifications.append(Notif('-',3,player.x-1,player.y))
+                        notifications.append(Notif('/',4,player.x-1,player.y+1))
+                        if not player_move_or_attack(-1, 0,False) and not player_move_or_attack(-1, -1,False) and not player_move_or_attack(-1, 1,False):  
+                            swing_sword(player.x-1,player.y-1)
+                            swing_sword(player.x-1,player.y+1)
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == SOUTH:
+                        notifications.append(Notif('/',2,player.x-1,player.y+1))
+                        notifications.append(Notif('|',3,player.x,player.y+1))
+                        notifications.append(Notif('\\',4,player.x+1,player.y+1))
+                        if not player_move_or_attack(0, 1,False) and not player_move_or_attack(+1, 1,False) and not player_move_or_attack(-1, 1,False):
+                            swing_sword(player.x-1,player.y+1)
+                            swing_sword(player.x+1,player.y+1)
+                            return 'attack'
+                        else:
+                            return 'nop'
+                elif (curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['spear'] and weap_2 is not None and weap_2.owner.name.split()[1] in ['sword','axe','stick']) or (curr_weap is None and weap_2 is not None and weap_2.owner.name.split(' ')[1] in ['spear']):
+                    if player.fighter.orientation == EAST:
+                        notifications.append(Notif('-',3,player.x+1,player.y))
+                        if not player_move_or_attack(1, 0,False):
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == NORTH:
+                        notifications.append(Notif('|',3,player.x,player.y-1))
+                        if not player_move_or_attack(1, -1,False):
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == WEST:
+                        notifications.append(Notif('-',3,player.x-1,player.y))
+                        if not player_move_or_attack(-1, 0,False):  
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == SOUTH:
+                        notifications.append(Notif('|',3,player.x,player.y+1))
+                        if not player_move_or_attack(0, 1,False):
+                            return 'attack'
+                        else:
+                            return 'nop'
+                else:
+                    if player.fighter.orientation == EAST:
+                        if not player_move_or_attack(1, 0,False):
+                            swing_sword(player.x+1,player.y)
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == NORTH:
+                        if not player_move_or_attack(0, -1,False):
+                            swing_sword(player.x,player.y-1)
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == WEST:
+                        if not player_move_or_attack(-1, 0,False): 
+                            swing_sword(player.x-1,player.y)
+                            return 'attack'
+                        else:
+                            return 'nop'
+                    elif player.fighter.orientation == SOUTH:
+                        if not player_move_or_attack(0, 1,False):
+                            swing_sword(player.x,player.y+1)
+                            return 'attack'
+                        else:
+                            return 'nop'
 
-
- 
             return 'didnt-take-turn'
+    else:
+        if key.vk == libtcod.KEY_ESCAPE:
+            return
+
+def in_game_menu():
+    opt = 5
+    while opt >= 0:
+        render_all()
+        opt = arrow_menu('--game menu--',['inventory','drop stuff','char info','back to game','quit'],15,0,-1,-3)
+        if opt == 0:
+            chosen_item = inventory_menu('use / equip \n select with action, cancel with menu.\n')
+            if chosen_item is not None:
+                chosen_item.use()
+            continue
+        elif opt == 1:
+            chosen_item = inventory_menu('drop \n select with action, cancel with menu.\n')
+            if chosen_item is not None:
+                chosen_item.drop()
+                continue
+        elif opt == 2:
+            msgbox('the koboldicider\n\nMaximum HP: ' + str(player.fighter.max_hp) + '\nAttack: ' + str(player.fighter.power) + '\nDefense: ' + str(player.fighter.defense), CHARACTER_SCREEN_WIDTH)
+        elif opt == 3:
+            return 'nop'
+        elif opt == 4:
+            if arrow_menu('really quit?',['YES','nah'],15,30,14) == 0:
+                opt = -1
+                return 'exit'
+            else:
+                continue
+
+
+def end_screen(player):
+    death_msg = 'good bye, koboldicider. you killed [{}] kobolds, '.format(kobolds_killed)
+    death_msg += 'had [{}] money and had equiped '.format(player.fighter.purse)
+    rhand = get_equipped_in_slot('right hand')
+    if rhand is not None:
+        death_msg += 'on your right hand [{}],'.format(rhand.owner.name)
+    lhand = get_equipped_in_slot('left hand')
+    if lhand is not None:
+        death_msg += '\n on your left hand [{}],'.format(lhand.owner.name)
+    head = get_equipped_in_slot('head')
+    if head is not None:
+        death_msg += 'on your head [{}],'.format(head.owner.name)
+    neck = get_equipped_in_slot('neck')
+    if neck is not None:
+        death_msg += 'on your neck [{}],'.format(neck.owner.name)
+    body = get_equipped_in_slot('body')
+    if body is not None:
+        death_msg += 'on your body [{}],'.format(body.owner.name)
+    if rhand is None and lhand is None and head is None and body is None and neck is None:
+        death_msg += 'nothing but vengeance on your soul.'
+    else:
+        death_msg += 'and nothing but vengeance on your soul.'
+    message(death_msg)
+    render_all()
+    msgbox(death_msg)
+    print ' [{}]'.format(death_msg)
+
 
 def player_death(player):
     #the game ended!
     global game_state
     message('You died!', libtcod.red)
+    end_screen(player)
+    msgbox(' game over ')
     game_state = 'dead'
     #for added effect, transform the player into a corpse!
     player.char = '%'
     player.color = libtcod.dark_red
-    main_menu()
+    render_all()
+    libtcod.console_wait_for_keypress(True)
+    return 'exit'
+
+
+
+def dragon_death(monster):
+    message('oh, wow, you won')
+    message('the dragon lies dead at your feet!')
+
+    render_all()
+    msgbox("congratulations!")
+    msgbox("you won!!")
+    msgbox("you have become kobolicider, destroyer of kobolds.")
+    msgbox(' you killed [{}] kobolds!'.format(kobolds_killed))
+
+    return 'exit'
+
 
 def monster_death(monster):
-    global objects
-    if random.randint(0,10) > 5:
-        #transform it into a nasty corpse! it doesn't block, can't be
-        #attacked and doesn't move
-        message('+' + str(monster.fighter.xp) + 'xp.', libtcod.orange)
-        monster.char = '%'
-        monster.color = libtcod.dark_red
-        monster.blocks = False
-        monster.fighter = None
-        monster.ai = None
-        monster.name = 'remains of ' + monster.name
-        #add new object of the tipe "ammo"
-        monster.send_to_back()
-    else:
-        objects.remove(monster)
+    global objects, kobolds_killed
+    if monster.name.split(' ')[0] in ['kobold'] and monster.name.split(' ')[1] not in ['champion']:
+        kobolds_killed+=1
+        _drop_ = random.randint(0,30)
+        if _drop_ <= 3:
+            addItem('wooden spear',monster.x,monster.y)
+        elif _drop_ <=5:
+            addItem('short sword',monster.x,monster.y)
+        elif _drop_ <= 7:
+            addItem('leather armour',monster.x,monster.y)
+        elif _drop_ <= 10:
+            addItem('hat', monster.x,monster.y)
+        elif _drop_ <= 20:
+            objects.append(Object(monster.x, monster.y, '$', 'money', libtcod.yellow, always_visible=True))
+    elif monster.name in ['kobold champion']:
+    addItem('metal armour',monster.x, mosnter.y)
+    addItem('elm',monster.x, monster.y)
+    addItem('long sword',monster.x,monster.y)
+        
+                                                     
+    if monster.name.split()[0] in ['dragon'] and not monster.name.split()[1] in ['head']:
+        for obj in objects:
+            if obj.name == 'dragon head':
+               obj.fighter.defense -= 1
+               obj.fighter.hp -= 1
+        
 
+    #transform it into a nasty corpse! it doesn't block, can't be
+    #attacked and doesn't move
+    #message('+' + str(monster.fighter.xp) + 'xp.', libtcod.orange)
+    monster.char = '%'
+    monster.color = libtcod.dark_red
+    monster.blocks = False
+    monster.fighter = None
+    monster.ai = DeadBody(monster)
+
+    monster.name = 'dead ' + monster.name.split()[0]
+    #add new object of the tipe "ammo"
+    monster.send_to_back()
+
+def monster_death_no_loot(monster):
+    #transform it into a nasty corpse! it doesn't block, can't be
+    #attacked and doesn't move
+    monster.char = '%'
+    monster.color = libtcod.dark_red
+    monster.blocks = False
+    monster.fighter = None
+    monster.ai = DeadBody(monster)
+
+    monster.name = 'dead ' + monster.name
+    #add new object of the tipe "ammo"
+    monster.send_to_back()
+
+    
 def target_tile(max_range=None):
     global key, mouse
     #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
@@ -2199,32 +3124,56 @@ def closest_monster(max_range):
                 closest_enemy = object
                 closest_dist = dist
     return closest_enemy
-            
-def shootAt(x,y,player):
-    __wp = player.fighter.current_weapon
-    if player.fighter.ammo[__wp] > 0:
-        dmg = weapon_inv[player.fighter.current_weapon].shoot()
-        player.fighter.ammo[player.fighter.current_weapon] -= 1
-        libtcod.line_init(player.x, player.y, x, y)
-        xx,yy=libtcod.line_step()
-        while (not xx is None):
-            for obj in objects:  #damage every fighter in range, including the player
-                if obj.fighter and (obj.x == xx and obj.y == yy) :
-                    message('The ' + obj.name + ' gets shot for ' + str(dmg) + ' hit points.', libtcod.orange)
-                    obj.fighter.take_damage(dmg)
-                return 1
-            if is_blocked(xx,yy):
-                break            
-    else:
-        message('out of ammo!', libtcod.light_red)
-  
+
+def save_floor(floorname='world'):
+
+    print "saving [{}]".format(floorname)    
+
+    file = shelve.open('./levels/'+floorname, 'n')
+    file['map'] = map
+    file['objects'] = objects
+    #file['stairs_index'] = objects.index(stairs)  #same for the stairs
+    file['dungeon_level'] = dungeon_level
+    file['player_pos'] = (player.x,player.y)
+    file.close()
+    if floorname == 'world':
+        file['dung_names'] = dung_list
+
+
+def load_floor(floorname='world'):
+    global map, objects, stairs, dungeon_level,player, dung_list
+    for ob in objects:
+        if ob.name == "dot":
+            new_obj = ob
+            break
+
+    print "loading [{}]".format(floorname)
+    file = shelve.open('./levels/'+floorname)
+    #file = shelve.open('/levels/'+floorname, 'r')
+
+    map = file['map']
+    objects = file['objects']
+    #stairs = objects[file['stairs_index']]
+    dungeon_level = file['dungeon_level']
+    player.x, player.y = file['player_pos']
+
+    if floorname == 'world':
+        dung_list = file['dung_names'] 
+
+    for ob in objects:
+        if ob.name in ["dot","koboldicider"]:
+            objects.remove(ob)
+            break;
+    objects.append(new_obj)
+    objects.append(player)
+
 def save_game():
     #open a new empty shelve (possibly overwriting an old one) to write the game data
     file = shelve.open('savegame', 'n')
     file['map'] = map
     file['objects'] = objects
-    file['player_index'] = objects.index(player)  #index of player in objects list
-    file['stairs_index'] = objects.index(stairs)  #same for the stairs
+    #file['player_index'] = objects.index(player)  #index of player in objects list
+    #file['stairs_index'] = objects.index(stairs)  #same for the stairs
     file['inventory'] = inventory
     file['game_msgs'] = game_msgs
     file['game_state'] = game_state
@@ -2238,114 +3187,112 @@ def load_game():
     file = shelve.open('savegame', 'r')
     map = file['map']
     objects = file['objects']
-    player = objects[file['player_index']]  #get index of player in objects list and access it
-    stairs = objects[file['stairs_index']]  #same for the stairs
+    #player = objects[file['player_index']]  #get index of player in objects list and access it
+    #stairs = objects[file['stairs_index']]  #same for the stairs
     inventory = file['inventory']
     game_msgs = file['game_msgs']
     game_state = file['game_state']
     dungeon_level = file['dungeon_level']
-    game_animations = []
     file.close()
  
     isRealTime = False
     initialize_fov()
+    game_animations = []
     dialogs = Dialogs()
     dialogs.loadFromFile()
 
  
 def new_game():
-    global player, inventory, weapon_inv, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects
+    global player, inventory, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects, notifications, dungeon_name, kobolds_killed
  
     #create object representing the player
-    fighter_component = PlayerFighter(hp=10, defense=1, power=2, xp=0, death_function=player_death)
+    fighter_component = PlayerFighter(hp=5, defense=5, power=2, xp=0, death_function=player_death)
     player = Object(0, 0, '@', 'koboldicider', libtcod.white, blocks=True, fighter=fighter_component)
     
     player.level = 1
     isRealTime = False
  
     #generate map (at this point it's not drawn to the screen)
-    dungeon_level = 1
+    dungeon_level = 0
+    dungeon_name = "world -----"
     #make_bsp() #commented make map
     objects = []
-    make_world_map(6)
+    make_world_map(6,True)
     initialize_fov()
- 
+    kobolds_killed = 0
     game_state = 'playing'
     inventory = []
     game_animations = []
-    weapon_inv = []
+    notifications = []
+
 
     #create the list of game messages and their colors, starts empty
     game_msgs = []
     save_game()
-    fighter_component = Fighter(hp=5, defense=5, power=3, xp=85, death_function=monster_death)
-    ai_component = BasicMonster()
 
-    monster = Object(random.randint(3,MAP_WIDTH), random.randint(3,MAP_HEIGHT), 'O', 'kobold farmer', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    objects.append(monster)
+    addMonster('kobold low_level',player.x,player.y+5,'neutral')
+    dogCorpse = Object(player.x,player.y+6,'%','remains of Fido', libtcod.dark_red, blocks=False)
+    objects.append(dogCorpse)
 
-    #initial equipment: a dagger
-    equipment_component = Equipment(slot='right hand', power_bonus=2)
-    obj = Object(0, 0, '-', 'knife', libtcod.sky, equipment=equipment_component)
-    inventory.append(obj)
-    equipment_component.equip()
-    obj.always_visible = True
+    notifications.append(Notif('nham, tasty dog!',5,player.x+1,player.y+4))
+
+    message('As you return from you errands, you find your house burning and a kobold eating your dog')
+    message('the wise man in the forest will know what to do.')
+    message('but first..')
  
-def next_level(dungeon = False,terrain=CHAR_MOUNTAIN):
+def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
+    global dungeon_level, dungeon_name
     #advance to the next level
-    global dungeon_level
-    message('You take a moment to rest, and recover your strength.', libtcod.light_violet)
-    player.fighter.heal(player.fighter.max_hp / 2)  #heal the player by 50%
-    lair = False
-    dungeon_level += 1
-    if dungeon:
-        r = random.randint(0,3)
-        if  r >= 2:
-            make_customgenericmap(terrain)
+    dungeon_name = name
+    objects.remove(player)
+    print "going places! dl[{}] in [{}]".format(dungeon_level,name)
+    if not up:
+        if dl == 0:
+            save_floor('world.dng')
+            dungeon_name = name
+            dungeon_level+=1
+            try:
+                load_floor('{}_{}F.dng'.format(name,dungeon_level))
+            except:
+                make_map(terrain,name=name)  #create a fresh new level!
+            initialize_fov()
+        elif dl < 3:
+            save_floor('{}_{}F.dng'.format(name,dungeon_level))
+            dungeon_level+=1
+            make_map(CHAR_MOUNTAIN,name=name)  #create a fresh new level!
+            initialize_fov()
+        elif dl < 4:
+            save_floor('{}_{}F.dng'.format(name,dungeon_level))
+            make_map('|',name)
+            dungeon_level+=1
+            initialize_fov()
+        elif dl < 5:
+            save_floor('{}_{}F.dng'.format(name,dungeon_level))
+            dungeon_level+=1
             lair = True
+            make_customgenericmap('#')
+            add_dragon()
+            initialize_fov()
         else:
-            make_map(terrain)  #create a fresh new level!
-        initialize_fov()
+            load_floor('world.dng')
+            initialize_fov()
+            dungeon_level = 0
+            message('oh, wow, you won')
     else:
-        make_world_map(dungeon_level*2)
-    #save_game() #save game!
-    
+        print "going up! dl[{}]".format(dungeon_level)
 
-    if not lair:
-        fighter_component = Fighter(hp=5, defense=3, power=5, xp=85, death_function=monster_death)
-        ai_component = BasicMonster()
-        monster = Object(random.randint(3,20), random.randint(3,20), 'O', 'kobold', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-        objects.append(monster)
-    else:
-        add_dragon()
-
-    
-
+        if dl == 1:
+            save_floor('{}_{}F.dng'.format(name,1))
+            load_floor('world.dng')
+            initialize_fov()
+            dungeon_level = 0
+        else:
+            dungeon_level -= 1
+            load_floor('{}_{}F.dng'.format(name,dungeon_level))
+            initialize_fov()
+    save_game()
 
     initialize_fov()
- 
-def add_dragon():
-    global objects
-    fighter_component = Fighter(hp=50, defense=9, power=8, xp=800, death_function=monster_death)
-    ai_component = BasicMonster()
-    monster = Object(40, 10, 'O', 'dragon head', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=50, defense=7, power=0, xp=5, death_function=monster_death)
-    ai_component = Body(monster)
-    monster_body = Object(40,9, '+', 'dragon upper body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=50, defense=7, power=0, xp=5, death_function=monster_death)
-    ai_component = Body(monster_body)
-    monster_body2 = Object(40,8, '+', 'dragon mid body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=50, defense=7, power=0, xp=5, death_function=monster_death)
-    ai_component = Body(monster_body)
-    monster_body3 = Object(40,7, '+', 'dragon lower body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=50, defense=7, power=2, xp=5, death_function=monster_death)
-    ai_component = Body(monster_body)
-    monster_tail = Object(40,8, '*', 'dragon tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    objects.append(monster)
-    objects.append(monster_body)
-    objects.append(monster_body2)
-    objects.append(monster_body3)
-    objects.append(monster_tail)
 
 def initialize_fov():
     global fov_recompute, fov_map,oldxx,oldyy
@@ -2368,8 +3315,9 @@ def play_game():
 
     (camera_x, camera_y) = (0, 0)
     dialogs = Dialogs()
+    dialogs.loadFromFile()
     player_action = None
-    notifications = []
+    #notifications = []
     mouse = libtcod.Mouse()
     key = libtcod.Key()
     #main loop
@@ -2387,8 +3335,9 @@ def play_game():
         #handle keys and exit game if needed
         player_action = handle_keys()
         if player_action == 'exit':
+            end_screen(player)
             save_game()
-            break
+            return;
 
         _x = player.x
         _oldx = dot.x 
@@ -2396,7 +3345,7 @@ def play_game():
         _y = player.y 
         dot.x,dot.y = player.fighter.getTargetTile()
         if (dot.x != _oldx or dot.y != _oldy):
-        	initialize_fov()
+            initialize_fov()
 
         for obj in objects:
             if obj.x == player.x and obj.y == player.y:
@@ -2407,22 +3356,16 @@ def play_game():
 
         if map[player.x][player.y].terrain == CHAR_TALL_GRASS:
            map[player.x][player.y] = Tile(False,terrain=CHAR_LONG_GRASS)
-           drop = random.randint(1,42)
-           if drop >= 37:
+           drop = random.randint(1,420)
+           if drop >= 418:
+                addMonster('worm', _x,_y)
+           elif drop >= 410:
                 objects.append(Object(player.x, player.y, '$', 'money', libtcod.yellow, always_visible=True))
-           elif drop >= 33:
-                fighter_component = Fighter(hp=2, defense=1, power=1, xp=3, death_function=monster_death)
-                ai_component = BasicMonster()
-                monster = Object(_x, _y, '~', 'worm', libtcod.pink,
-                                 blocks=True, fighter=fighter_component, ai=ai_component)
-                objects.append(monster)
            initialize_fov()
            continue
 
         if player_action == 'attack':
             swing_sword(_x,_y)
-
-            
 
         #let monsters take their turn
         if isRealTime:
@@ -2442,6 +3385,9 @@ def play_game():
                         else:
                             object.ai.take_turn()
 
+        if game_state == 'dead':
+            return
+
 def swing_sword(_x,_y):
     global objects
     if map[_x][_y].terrain in [CHAR_LONG_GRASS,CHAR_TALL_GRASS]:
@@ -2459,46 +3405,70 @@ def swing_sword(_x,_y):
            monster = Object(_x, _y, '-', 'worm', libtcod.desaturated_red,blocks=True, fighter=fighter_component, ai=ai_component)
            initialize_fov()
 
+    elif map[_x][_y].terrain in [CHAR_FOREST]:
+        drop = random.randint(1,42)
+        if drop >= 37:
+           addItem('wooden stick',_x,_y)
+        
+
+
 
 def main_menu():
-    #img = libtcod.image_load('menu_background.png')
+    libtcod.console_flush()
+    libtcod.console_set_default_background(0, libtcod.black)
+    libtcod.console_clear(0)
+
+    img = libtcod.image_load('menu_background.png')
     libtcod.console_map_ascii_code_to_font('@', 2, 0)
     libtcod.console_map_ascii_code_to_font('O', 1, 0)
-    libtcod.console_map_ascii_code_to_font('+', 3, 0)
+    #libtcod.console_map_ascii_code_to_font('+', 3, 0)
     libtcod.console_map_ascii_code_to_font('T', 6, 0)
 
+    libtcod.image_blit_2x(img, 0, 0, 0)
     while not libtcod.console_is_window_closed():
         #show the background image, at twice the regular console resolution
-        #libtcod.image_blit_2x(img, 0, 0, 0)
  
         #show the game's title, and some credits!
-        libtcod.console_set_default_foreground(0, libtcod.black)
-        libtcod.console_print_ex(0, SCREEN_WIDTH/2+10, SCREEN_HEIGHT-10, libtcod.BKGND_NONE, libtcod.CENTER,
-                                 'kobolicide - test version')
-        libtcod.console_print_ex(0, SCREEN_WIDTH/2+10, SCREEN_HEIGHT-12, libtcod.BKGND_NONE, libtcod.CENTER, 'gr33n 0v3r b14ck')
+        libtcod.console_set_default_foreground(0, libtcod.white)
  
         #show options and wait for the player's choice
         #_continue = arrow_menu('continue ?',['   yes','    no'],12,0,12,12)
         #choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 25,10)
-        choice = arrow_menu('koboldicide test version',['Play a new game', 'Continue last game', 'Quit'],40,0,3,10)
+        libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_NONE, libtcod.RIGHT, '7DKoboldicider <--------')          
+        choice = arrow_menu('welcome, koboldicider',['into the game!', 'please help?', 'i wanna quit.'],40,0,20,15)
+
  
         if choice == 0:  #new game
             new_game()
             play_game()
-        if choice == 1:  #load last game
-            try:
-                load_game()
-            except:
-                msgbox('\n No saved game to load.\n', 24)
-                continue
-            play_game()
+        if choice == 1:  #show help screen
+            libtcod.console_set_default_background(0, libtcod.black)
+
+            libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_SET, libtcod.RIGHT, '7DKoboldicider <--------')           
+            libtcod.console_print_ex(0, 60, 12, libtcod.BKGND_SET, libtcod.RIGHT, 'move with [w,a,s,d] or kp[8,4,6,2] or [arrow keys]')         
+            libtcod.console_print_ex(0, 60, 13, libtcod.BKGND_SET, libtcod.RIGHT, 'attack the square you are facing        [f or kp9]')         
+            libtcod.console_print_ex(0, 60, 14, libtcod.BKGND_SET, libtcod.RIGHT, 'use, pick up, talk, go up/down          [e or kp7]')         
+            libtcod.console_print_ex(0, 60, 15, libtcod.BKGND_SET, libtcod.RIGHT, 'throw a stick, spear or boomerang       [q or kp1]')         
+            libtcod.console_print_ex(0, 60, 16, libtcod.BKGND_SET, libtcod.RIGHT, 'open in-game menu                       [c or kp3]')         
+            libtcod.console_print_ex(0, 60, 17, libtcod.BKGND_SET, libtcod.RIGHT, 'wait a turn                         [space or kp5]')         
+            libtcod.console_print_ex(0, 60, 18, libtcod.BKGND_SET, libtcod.RIGHT, '                     ----')          
         elif choice == 2:  #quit
-            break
+            return 
+
  
 libtcod.console_set_custom_font('16x16_sm_ascii.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'kobolicide - teste version v-1', False)
+libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, '7DKoboldicide', False)
 libtcod.sys_set_fps(LIMIT_FPS)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
+panel_v = libtcod.console_new(SCREEN_WIDTH - CAMERA_WIDTH, SCREEN_HEIGHT - PANEL_HEIGHT)
+
+
  
+try:
+    os.mkdir('levels')
+except:
+    shutil.rmtree('levels')
+    os.mkdir('levels')
 main_menu()
+shutil.rmtree('levels')
