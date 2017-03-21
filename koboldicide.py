@@ -1321,6 +1321,8 @@ def make_world_map(grassness=20,start=False):
     
     c = place_thing(CHAR_DIRT,7, False, 6);
     player.x, player.y = c
+    addItem('stone',player.x -4, player.y -4)
+    addItem('stone',player.x +4, player.y -3)
     if start:
         map[player.x-2][player.y-2] = Tile(True,terrain='-')
         map[player.x-1][player.y-2] = Tile(True,terrain='X')
@@ -1831,7 +1833,10 @@ def place_objects(room):
     if dungeon_name.split()[1] in ['woods']:
         items.append('bag')
     if dungeon_name.split()[1] in ['woods','forest']:
-        monster_chances['wolf'] = 15
+        monster_chances['kobold low_level'] = 15 
+        monster_chances['kobold mid_level'] = 10
+        monster_chances['kobold high_level'] = 5
+        monster_chances['wolf'] = 35
     if dungeon_name.split()[1] in ['desert']:
         items.append('wooden boomerang')
     if dungeon_name not in lair_name and dungeon_level > 2:
@@ -1870,6 +1875,9 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'wooden stick':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
         item = Object(x, y, '/', 'wooden stick', libtcod.light_sepia, equipment=equipment_component)
+    elif name == 'leather whip':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '\', 'leather whip', libtcod.light_sepia, equipment=equipment_component)
     elif name == 'work axe':
         equipment_component = Equipment(slot='right hand', power_bonus=2)
         item = Object(x, y, 'P', 'work axe', libtcod.silver, equipment=equipment_component)
@@ -1881,14 +1889,29 @@ def addItem(name,x=-1,y=-1,player=True):
         item = Object(x, y, '(', 'wooden boomerang', libtcod.light_sepia, equipment=equipment_component)
     elif name == 'short sword':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
-        item = Object(x, y, '-', 'short sword', libtcod.silver, equipment=equipment_component)
+        item = Object(x, y, '-', 'short sword', libtcod.dark_grey, equipment=equipment_component)
+    elif name == 'combat knife':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '-', 'combat knife', libtcod.light_grey, equipment=equipment_component)
+    elif name == 'pocket knife':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '-', 'pocket knife', libtcod.light_grey, equipment=equipment_component)
     elif name == 'long sword':
         equipment_component = Equipment(slot='right hand', power_bonus=2)
         item = Object(x, y, '-', 'long sword', libtcod.silver, equipment=equipment_component)
+    elif name == 'stone':
+        if random.randint(1,2) == 2:
+            equipment_component = Equipment(slot='right hand', power_bonus=1)
+            item = Object(x, y, '-', 'small stone', libtcod.silver, equipment=equipment_component)
+        else
+            equipment_component = Equipment(slot='right hand', power_bonus=2)
+            item = Object(x, y, '-', 'large stone', libtcod.silver, equipment=equipment_component)
     elif name == 'shirt':
         equipment_component = Equipment(slot='body', defense_bonus=0)
-        st = random.choice(['hawaiian ','business ','white t-','manowar t-','ulver t-','abba t-','radiohead t-','old t-','pink ','sleeveless '])
-        item = Object(x, y, 't', '{}shirt'.format(st), libtcod.white, equipment=equipment_component)
+        st = random.choice(['hawaiian ','business ','white t-','manowar t-','ulver t-','abba t-','radiohead t-','old t-','pink ','sleeveless ','colorful poncho','clean toga','dirty rags'])
+        if st not in ['colorful poncho','clean toga','dirty rags']:
+            st = '{}shirt'.format(st)
+        item = Object(x, y, 't', st, libtcod.white, equipment=equipment_component)
     elif name == 'leather armour':
         equipment_component = Equipment(slot='body', defense_bonus=2)
         item = Object(x, y, 'a', 'leather armour', libtcod.sepia, equipment=equipment_component)
@@ -1906,8 +1929,11 @@ def addItem(name,x=-1,y=-1,player=True):
             equipment_component = Equipment(slot='back', capacity=4)
             item = Object(x, y, '#', 'ugly backpack', libtcod.white, equipment=equipment_component)
     elif name == 'hat':
-        equipment_component = Equipment(slot='head',defense_bonus=1)
-        nm = random.choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party '])
+        nm = random.choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party ','bandanna '])
+        if nm in ['flower ','party ','bandanna ']:
+            equipment_component = Equipment(slot='head',defense_bonus=0)
+        else:
+            equipment_component = Equipment(slot='head',defense_bonus=1)
         item = Object(x, y, '^', '{}hat'.format(nm), libtcod.white, equipment=equipment_component)
     elif name == 'elm':
         equipment_component = Equipment(slot='head',defense_bonus=2)
@@ -2700,10 +2726,11 @@ def handle_keys():
             if key_char in ['q','Q'] or key.vk == libtcod.KEY_KP1:
                 curr_weap = get_equipped_in_slot('right hand')
                 weap_2 = get_equipped_in_slot('left hand')
-                if curr_weap is None or curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in ['spear','bow','boomerang','stick']:
-                    if weap_2 is not None and weap_2.owner.name.split(' ')[1] in ['spear','bow','boomerang','stick']:
+                throwable = ['spear','bow','boomerang','stick','stone']
+                if curr_weap is None or curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in throwable:
+                    if weap_2 is not None and weap_2.owner.name.split(' ')[1] in throwable:
                         curr_weap = weap_2
-                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['spear','bow','boomerang','stick']:
+                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in throwable:
                     _boomerang_ = (curr_weap.owner.name.split(' ')[1] in ['boomerang'])
                     fs = []
                     for o in objects:
@@ -2805,7 +2832,7 @@ def handle_keys():
                                 notifications.append(Notif('(',3,_x,player.y))
                     if not fit is None:
                         notifications.append(Notif('*',5,_x,_y))
-                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick']:
+                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','stone']:
                             message('you threw your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
                             i_name = curr_weap.owner.name
                             for it in inventory:
@@ -2817,7 +2844,7 @@ def handle_keys():
                         fit.fighter.take_damage(dmg)
                     else:
                         message('you threw your {} at nothing'.format(curr_weap.owner.name))
-                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick']:
+                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','stone']:
                             i_name = curr_weap.owner.name
                             for it in inventory:
                                 if it.name == i_name:
@@ -2851,10 +2878,12 @@ def handle_keys():
                     elif orien == SOUTH:
                         if player_move_or_attack(0, 1,False):
                             message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
-                if curr_weap is None and weap_2 is not None or (curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in ['sword','axe','stick'] and weap_2 is not None): 
-                    if weap_2.owner.name.split(' ')[1] in ['sword','axe','stick']:
+                swingable = ['sword','axe','stick']
+                pokable = ['spear','whip']
+                if curr_weap is None and weap_2 is not None or (curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in swingable and weap_2 is not None): 
+                    if weap_2.owner.name.split(' ')[1] in swingable:
                         curr_weap = weap_2
-                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['sword','axe','stick']:
+                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in swingable:
                     if player.fighter.orientation == EAST:
                         notifications.append(Notif('/',2,player.x+1,player.y-1))
                         notifications.append(Notif('-',3,player.x+1,player.y))
@@ -2895,7 +2924,7 @@ def handle_keys():
                             return 'attack'
                         else:
                             return 'nop'
-                elif (curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['spear'] and weap_2 is not None and weap_2.owner.name.split()[1] in ['sword','axe','stick']) or (curr_weap is None and weap_2 is not None and weap_2.owner.name.split(' ')[1] in ['spear']):
+                elif (curr_weap is not None and curr_weap.owner.name.split(' ')[1] in pokable and weap_2 is not None and weap_2.owner.name.split()[1] in swingable) or (curr_weap is None and weap_2 is not None and weap_2.owner.name.split(' ')[1] in pokable):
                     if player.fighter.orientation == EAST:
                         notifications.append(Notif('-',3,player.x+1,player.y))
                         if not player_move_or_attack(1, 0,False):
@@ -2979,27 +3008,57 @@ def in_game_menu():
 
 
 def end_screen(player):
-    death_msg = 'good bye, koboldicider. you killed [{}] kobolds, '.format(kobolds_killed)
-    death_msg += 'had [{}] money and had equiped '.format(player.fighter.purse)
     rhand = get_equipped_in_slot('right hand')
-    if rhand is not None:
-        death_msg += 'on your right hand [{}],'.format(rhand.owner.name)
     lhand = get_equipped_in_slot('left hand')
-    if lhand is not None:
-        death_msg += '\n on your left hand [{}],'.format(lhand.owner.name)
     head = get_equipped_in_slot('head')
-    if head is not None:
-        death_msg += 'on your head [{}],'.format(head.owner.name)
     neck = get_equipped_in_slot('neck')
-    if neck is not None:
-        death_msg += 'on your neck [{}],'.format(neck.owner.name)
     body = get_equipped_in_slot('body')
-    if body is not None:
-        death_msg += 'on your body [{}],'.format(body.owner.name)
-    if rhand is None and lhand is None and head is None and body is None and neck is None:
-        death_msg += 'nothing but vengeance on your soul.'
-    else:
-        death_msg += 'and nothing but vengeance on your soul.'
+    
+    title = ''
+    equip = ''
+    if body is not None and body.owner.name == 'metal armour' and head is not None and head.owner.name == 'metal elm':
+        title = 'iron-man'
+    if body is None and head is None:
+        title = 'nudist'
+    elif body is not None and body.owner.name == 'colorful poncho' and head is not None and head.owner.name == 'sombrero hat':
+        title = 'el mariachi'
+    elif body is not None and body.owner.name == 'hawaiian shirt' and head is not None and head.owner.name == 'flower hat':
+        title = 'hawai\ʻi maoli'
+    elif body is not None and body.owner.name == 'hawaiian shirt' and (rhand is not None and rhand.owner.name == 'pocket knife' or lhand is not None and lhand.owner.name == 'pocket knife':
+        title = 'macgyver'
+    elif body is not None and body.owner.name == 'leather armour' and head is not None and head.owner.name == 'leather hat' and (rhand is not None and rhand.owner.name == 'leather whip' or lhand is not None and lhand.owner.name == 'leather whip':
+        title = 'kinky'
+    elif head is not None and head.owner.name == 'cowboy hat' and (rhand is not None and rhand.owner.name == 'leather whip' or lhand is not None and lhand.owner.name == 'leather whip':
+        title = 'indiana jones'
+    elif head is not None and head.owner.name == 'bandanna hat' and (rhand is not None and rhand.owner.name.split()[1] == 'knife' or lhand is not None and lhand.owner.name.split()[1] == 'knife') and body is not None and body.owner.name == 'sleeveless shirt':
+        title = 'rambo'
+
+    if (rhand is not None and rhand.owner.name.split()[1] == 'stone' and lhand is not None and lhand.owner.name.split()[1] == 'stick') or (rhand is not None and rhand.owner.name.split()[1] == 'stick' and lhand is not None and lhand.owner.name.split()[1] == 'stone'):
+        equip = 'sticks & stones'
+        if title != '':
+            title += ', bone breaker'
+        else:
+            title += 'bone breaker'
+    elif rhand is None and lhand is None:
+        equip = 'only your fists'
+
+
+    death_msg = 'good bye, {}, the koboldicider. you killed [{}] kobolds, '.format(title,kobolds_killed)
+    death_msg += 'had [{}] money and had {} equipped.'.format(player.fighter.purse, equip)
+#    if rhand is not None:
+#        death_msg += 'on your right hand [{}],'.format(rhand.owner.name)
+#    if lhand is not None:
+#        death_msg += '\n on your left hand [{}],'.format(lhand.owner.name)
+#    if head is not None:
+#        death_msg += 'on your head [{}],'.format(head.owner.name)
+#    if neck is not None:
+#        death_msg += 'on your neck [{}],'.format(neck.owner.name)
+#    if body is not None:
+#        death_msg += 'on your body [{}],'.format(body.owner.name)
+#    if rhand is None and lhand is None and head is None and body is None and neck is None:
+#        death_msg += 'nothing but vengeance on your soul.'
+#    else:
+#        death_msg += 'and nothing but vengeance on your soul.'
     message(death_msg)
     render_all()
     msgbox(death_msg)
