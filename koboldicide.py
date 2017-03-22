@@ -170,7 +170,7 @@ class Tile:
                 self.block_sight = True
             else:
                self.block_sight = False
-        elif self.terrain in [CHAR_DIRT, CHAR_GRASS, CHAR_ROAD , CHAR_LONG_GRASS, CHAR_STAIRS]:
+        elif self.terrain in [CHAR_DIRT, CHAR_GRASS, CHAR_ROAD , CHAR_LONG_GRASS, CHAR_STAIRS, CHAR_SAND]:
             self.blocked = False
             self.block_sight = False
         elif self.terrain in [CHAR_TALL_GRASS,CHAR_DOOR]:
@@ -1255,8 +1255,8 @@ def make_world_map(grassness=20,start=False):
 
     dung_list = []
     name_list = []
-    for i in range(0,15 ):
-        n =  generateName(4)
+    for i in range(0,25):
+        n =  generateName(3)
         name_list.append(n)
     #print name_list
     if (grassness > MAP_WIDTH / 6):
@@ -1315,7 +1315,7 @@ def make_world_map(grassness=20,start=False):
         dung_list.append(Dungeon('{} woods'.format(n),stairs.x, stairs.y))
     
     for _x in range(1,2):
-        place_thing(CHAR_SAND,2+_x, True, 1);
+        place_thing(CHAR_SAND,4+_x, False, 6);
         objects.append(stairs)
         n = random.choice(name_list)
         name_list.remove(n)
@@ -2197,6 +2197,32 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
                                  name + ':' + str(value) + '/' + str(maximum))
  
 #def get_names_under_mouse():
+def get_terrain_name(terrain):
+    if terrain == CHAR_DIRT:
+        return 'floor'
+    elif terrain == CHAR_SAND:
+        return 'desert'
+    elif terrain == CHAR_MOUNTAIN:
+        return 'mountains'
+    elif terrain == CHAR_GRASS:
+        return 'low grass'
+    elif terrain == CHAR_LONG_GRASS:
+        return 'grass'
+    elif terrain == CHAR_TALL_GRASS:
+        return 'tall grass'
+    elif terrain == CHAR_LAKE:
+        return 'water'
+    elif terrain == CHAR_ROAD:
+        return 'roads'
+    elif terrain in [CHAR_STAIRS,'<','>']:
+        return 'stairs'
+    elif terrain in ['|','-','[',']']:
+        return 'house'
+    elif terrain == CHAR_FOREST:
+        return 'trees'
+    else:
+        return '[{}]'.format(terrain)
+
 def get_names(x,y):
     global mouse
     #return a string with the names of all objects under the mouse
@@ -2204,15 +2230,36 @@ def get_names(x,y):
     #(x, y) = (mouse.cx, mouse.cy)
  
     #create a list with the names of all objects at the mouse's coordinates and in FOV
+
     names = [obj.name for obj in objects
              if obj.x == x and obj.y == y and obj.name != 'dot' and obj.name != 'stairs']
     if len(names) < 1:
-        names = map[x][y].terrain
+        names = get_terrain_name(map[x][y].terrain)
     if names in ['<','>'] and dungeon_level == 0:
         names = get_dungeon_name(x,y)
     else:
-        names = ', '.join(names)  #join the names, separated by commas
-    return names
+        names.sort()
+        nm_old = ''
+        nm_cnt = 0
+        out_names = []
+        
+        for nm in names:
+            if nm == nm_old:
+                nm_cnt+=1
+            else:
+                if nm_cnt > 1:
+                    out_names.append('{} x{}'.format(nm_old,nm_cnt))
+                else:
+                    out_names.append('{}'.format(nm_old))
+                nm_cnt = 1
+                nm_old = nm
+        if nm==nm_old:
+            if nm_cnt > 1:
+                out_names.append('{} x{}'.format(nm_old,nm_cnt))
+            else:
+                out_names.append('{}'.format(nm_old))
+        out_names = ', '.join(out_names)
+    return out_names
 
 def move_camera(target_x, target_y):
     global camera_x, camera_y, fov_recompute
@@ -2240,42 +2287,45 @@ def to_camera_coordinates(x, y):
  
     return (x, y)
 
-
 def get_square(width,height,i_x,i_y,is_dungeon=False):
 
 
     str = '({},{})->({},{})'.format(i_x,i_y,i_x+width,i_y+height)
-    count = [0,0,0,0,0,0,0,0,0]
+#            0 1 2 3 4 5 6 7 8 9 0 1 2 3     
+#              @ < > ; , ` . # T ~ '
+    count = [0,0,0,0,0,0,0,0,0,0,0,0]
     
     for y in range(i_y,i_y+height):
         for x in range(i_x,i_x+width):
             tile = map[x][y]
             if player.x == x and player.y == y:
-                return 7
+                return 1
             if is_dungeon and tile.terrain in ['<']:
-                return 8
+                return 2
             elif is_dungeon and tile.terrain in ['>']:
-                return 9
+                return 3
             if tile.terrain == CHAR_TALL_GRASS:
-                count[0]+=1
-            elif tile.terrain == CHAR_LONG_GRASS:
-                count[1]+=1
-            elif tile.terrain == CHAR_GRASS:
-                count[2]+=1
-            elif tile.terrain == CHAR_DIRT:
-                count[3]+=1
-            elif tile.terrain == CHAR_MOUNTAIN:
                 count[4]+=1
-            elif tile.terrain == CHAR_FOREST:
+            elif tile.terrain == CHAR_LONG_GRASS:
                 count[5]+=1
-            elif tile.terrain == CHAR_LAKE:
+            elif tile.terrain == CHAR_GRASS:
                 count[6]+=1
+            elif tile.terrain == CHAR_DIRT:
+                count[7]+=1
+            elif tile.terrain == CHAR_MOUNTAIN:
+                count[8]+=1
+            elif tile.terrain == CHAR_FOREST:
+                count[9]+=1
+            elif tile.terrain == CHAR_LAKE:
+                count[10]+=1
+            elif tile.terrain == CHAR_SAND:
+                count[11]+=1
     i = 0
     _max = 0
 
 
     while i < len(count):
-        if count[i] > _max and i >= 3:
+        if count[i] > _max and i >= 5:
             _max = count[i]
         else:
             i+=1
@@ -2294,7 +2344,10 @@ def get_terrains(width,height):
         is_dungeon = False
     mmap = []
     #        ; ' , . # T ~ @
-    _ter_ = [CHAR_TALL_GRASS,CHAR_LONG_GRASS,CHAR_GRASS,CHAR_DIRT,CHAR_MOUNTAIN,CHAR_FOREST,CHAR_LAKE,'@','>','<']
+    #            0 1 2 3 4 5 6 7 8 9 0 1 2 3     
+    #              @ < > ; , ` . # T ~ '
+
+    _ter_ = [' ','@','>','<',CHAR_TALL_GRASS,CHAR_LONG_GRASS,CHAR_GRASS,CHAR_DIRT,CHAR_MOUNTAIN,CHAR_FOREST,CHAR_LAKE,CHAR_SAND]
     mmap_x = 0
     mmap_y = 0
 
@@ -2349,6 +2402,8 @@ def mini_map(stop = True):
             color = libtcod.darker_green
         elif t == CHAR_LONG_GRASS:
             color = libtcod.dark_green
+        elif t == CHAR_SAND:
+            color = libtcod.yellow
         elif t in ['@','<']:
             color = libtcod.white
         else:
@@ -2376,6 +2431,7 @@ def mini_map(stop = True):
  
         if key.vk == libtcod.KEY_ENTER and key.lalt:  #(special case) Alt+Enter: toggle fullscreen
             libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen)
+
 
 def render_all():
     global fov_map, color_dark_wall, color_light_wall, dungeon_name
