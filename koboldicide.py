@@ -1228,6 +1228,7 @@ def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
     placed_entry = True
     if thing not in [CHAR_LONG_GRASS]: 
         placed_entry = False
+
     for _xx in range(max(0,_x-_wid),min(_x+_wid,MAP_WIDTH)):
         for _yy in range(max(0,_y-_wid),min(_y+_wid,MAP_HEIGHT)):
             if map[_xx][_yy].terrain in acceptable:
@@ -1306,15 +1307,15 @@ def make_world_map(grassness=20,start=False):
         dung_list.append(Dungeon(n,stairs.x, stairs.y))
         #print '({},{}) - {}'.format(n, stairs.x, stairs.y)
 
-    for _x in range(1,2):
+    for _x in range(1,3):
         place_thing(CHAR_FOREST,3,True,1);
         objects.append(stairs)
         n = random.choice(name_list)
         name_list.remove(n)
         dung_list.append(Dungeon('{} woods'.format(n),stairs.x, stairs.y))
     
-    for _x in range(1,2):
-        place_thing(CHAR_SAND,4+_x, False, 6);
+    for _x in range(1,3):
+        place_thing(CHAR_SAND,4+_x, True, 5);
         objects.append(stairs)
         n = random.choice(name_list)
         name_list.remove(n)
@@ -1840,7 +1841,7 @@ def place_objects(room):
         monster_chances['kobold low_level'] = 0 
         monster_chances['kobold mid_level'] = 0
         monster_chances['kobold high_level'] = 0
-        monster_chances['wolf animal'] = 45
+        monster_chances['desert worm'] = 95
     if dungeon_name not in lair_name and dungeon_level > 2:
         monster_chances['kobold champion'] = 5
  
@@ -1904,10 +1905,10 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'stone':
         if random.randint(1,2) == 2:
             equipment_component = Equipment(slot='right hand', power_bonus=1)
-            item = Object(x, y, '-', 'small stone', libtcod.silver, equipment=equipment_component)
+            item = Object(x, y, '*', 'small stone', libtcod.silver, equipment=equipment_component)
         else:
             equipment_component = Equipment(slot='right hand', power_bonus=2)
-            item = Object(x, y, '-', 'large stone', libtcod.silver, equipment=equipment_component)
+            item = Object(x, y, '*', 'large stone', libtcod.silver, equipment=equipment_component)
     elif name == 'shirt':
         equipment_component = Equipment(slot='body', defense_bonus=0)
         st = random.choice(['hawaiian ','business ','white t-','manowar t-','ulver t-','abba t-','radiohead t-','old t-','pink ','sleeveless ','colorful poncho','clean toga','dirty rags'])
@@ -2013,7 +2014,7 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         fighter_component = Fighter(hp=4, defense=2, power=4, xp=85, death_function=wolf_death,state='wandering')
         ai_component = BasicMonster()
         monster = Object(x, y, 'w', 'wolf', libtcod.silver, blocks=True, fighter=fighter_component, ai=ai_component)
-    elif name = 'desert worm':
+    elif name == 'desert worm':
         fighter_component = Fighter(hp=2, defense=2, power=2, xp=3, death_function=monster_death_no_loot,state='wandering')
         ai_component = BasicMonster()
         monster = Object(x, y, '~', 'desert worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
@@ -2259,10 +2260,10 @@ def get_names(x,y):
 
     names = [obj.name for obj in objects
              if obj.x == x and obj.y == y and obj.name != 'dot' and obj.name != 'stairs']
-    if len(names) < 1:
-        names = get_terrain_name(map[x][y].terrain)
     if names in ['<','>'] and dungeon_level == 0:
-        names = get_dungeon_name(x,y)
+        out_names = get_dungeon_name(x,y)
+    elif len(names) < 1:
+        out_names = get_terrain_name(map[x][y].terrain)
     else:
         names.sort()
         nm_old = ''
@@ -3246,8 +3247,11 @@ def monster_death_no_loot(monster):
     #attacked and doesn't move
     if monster.name == 'desert worm':
         if random.randint(1,99) == 77:
-            addShaiHulud()
-
+            addShaiHulud(monster.x,monster.y)
+        else:
+            addMonster('desert worm', monster.x-3, monster.y-3)
+            addMonster('desert worm', monster.x-2, monster.y-3)
+            addMonster('desert worm', monster.x-3, monster.y-1)
     monster.char = '%'
     monster.color = libtcod.dark_red
     monster.blocks = False
