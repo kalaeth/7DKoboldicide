@@ -1,7 +1,6 @@
 #!/usr/bin/python
 #
-# Koboldicider by Kalaeth
-# started: March 5, 17h00
+
 # with special thanks to Jotaf for his tutorial
 #
  
@@ -1811,10 +1810,6 @@ def place_homes(room, inabitants):
 
     return inabitants
 
-
-
-
-
 def place_objects(room):
     #this is where we decide the chance of each monster or item appearing.
  
@@ -1842,6 +1837,10 @@ def place_objects(room):
         monster_chances['wolf animal'] = 25
     if dungeon_name.split()[1] in ['desert']:
         items.append('wooden boomerang')
+        monster_chances['kobold low_level'] = 0 
+        monster_chances['kobold mid_level'] = 0
+        monster_chances['kobold high_level'] = 0
+        monster_chances['wolf animal'] = 45
     if dungeon_name not in lair_name and dungeon_level > 2:
         monster_chances['kobold champion'] = 5
  
@@ -2014,6 +2013,10 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         fighter_component = Fighter(hp=4, defense=2, power=4, xp=85, death_function=wolf_death,state='wandering')
         ai_component = BasicMonster()
         monster = Object(x, y, 'w', 'wolf', libtcod.silver, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name = 'desert worm':
+        fighter_component = Fighter(hp=2, defense=2, power=2, xp=3, death_function=monster_death_no_loot,state='wandering')
+        ai_component = BasicMonster()
+        monster = Object(x, y, '~', 'desert worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
     else:
         fighter_component = Fighter(hp=1, defense=0, power=1, xp=3, death_function=monster_death_no_loot,state='wandering')
         ai_component = BasicMonster()
@@ -2040,6 +2043,29 @@ def add_dragon():
     fighter_component = Fighter(hp=6, defense=5, power=2, xp=5, death_function=monster_death)
     ai_component = Body(monster_body)
     monster_tail = Object(40,8, 'v', 'dragon tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    objects.append(monster)
+    objects.append(monster_body)
+    objects.append(monster_body2)
+    objects.append(monster_body3)
+    objects.append(monster_tail)
+
+def addShaiHulud(x,y):
+    global objects
+    fighter_component = Fighter(hp=30, defense=12, power=8, xp=800, death_function=dragon_death)
+    ai_component = BasicMonster()
+    monster = Object(x, y, 'O', 'shai-hulud head', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=10, power=0, xp=5, death_function=monster_death)
+    ai_component = Body(monster)
+    monster_body = Object(x,y-1, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
+    ai_component = Body(monster_body)
+    monster_body2 = Object(x,y-2, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
+    ai_component = Body(monster_body)
+    monster_body3 = Object(x,y-3, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+    fighter_component = Fighter(hp=6, defense=5, power=2, xp=5, death_function=monster_death)
+    ai_component = Body(monster_body)
+    monster_tail = Object(x,y-4, 'o', 'shai-hulud tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     objects.append(monster)
     objects.append(monster_body)
     objects.append(monster_body2)
@@ -2343,9 +2369,8 @@ def get_terrains(width,height):
     else:
         is_dungeon = False
     mmap = []
-    #        ; ' , . # T ~ @
-    #            0 1 2 3 4 5 6 7 8 9 0 1 2 3     
-    #              @ < > ; , ` . # T ~ '
+    #        0 1 2 3 4 5 6 7 8 9 0 1 2 3     
+    #          @ < > ; , ` . # T ~ S
 
     _ter_ = [' ','@','>','<',CHAR_TALL_GRASS,CHAR_LONG_GRASS,CHAR_GRASS,CHAR_DIRT,CHAR_MOUNTAIN,CHAR_FOREST,CHAR_LAKE,CHAR_SAND]
     mmap_x = 0
@@ -3219,6 +3244,10 @@ def wolf_death(monster):
 def monster_death_no_loot(monster):
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
+    if monster.name == 'desert worm':
+        if random.randint(1,99) == 77:
+            addShaiHulud()
+
     monster.char = '%'
     monster.color = libtcod.dark_red
     monster.blocks = False
