@@ -1403,7 +1403,7 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
         r_min = 20
         min_rooms = 4
         max_rooms_here = 8
-        _stairs_ = False
+        _stairs_ = True
 
     if name != lair_name and dungeon_level > 2:
         _stairs_ = False
@@ -1491,6 +1491,15 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
     if _stairs_:
         #stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
         map[new_x][new_y].terrain = '<'
+        if terrain == CHAR_SAND:
+            map[new_x][new_y-1].terrain = CHAR_MOUNTAIN
+            map[new_x][new_y+1].terrain = CHAR_MOUNTAIN
+            map[new_x+1][new_y-1].terrain = CHAR_MOUNTAIN
+            map[new_x+1][new_y].terrain = CHAR_MOUNTAIN
+            map[new_x+1][new_y+1].terrain = CHAR_MOUNTAIN
+            map[new_x+2][new_y-1].terrain = CHAR_MOUNTAIN
+            map[new_x+2][new_y].terrain = CHAR_MOUNTAIN
+            map[new_x+2][new_y+1].terrain = CHAR_MOUNTAIN
         #objects.append(stairs)
         #stairs.send_to_back()  #so it's drawn below the monsters
 
@@ -1578,9 +1587,6 @@ def make_customgenericmap(terrain = CHAR_MOUNTAIN):
                     addMonster('nurse',x,y)
             elif t != '#':
                 map[x][y] = Tile(False,t)
-
-    #create stairs at the center of the last room
-
 
     stairs = Object(new_x, new_y, '<', 'stairs', libtcod.white, always_visible=True)
     map[new_x][new_y] = Tile(False, CHAR_STAIRS)
@@ -1837,11 +1843,14 @@ def place_objects(room):
         monster_chances['kobold high_level'] = 5
         monster_chances['wolf animal'] = 25
     if dungeon_name.split()[1] in ['desert']:
-        items.append('wooden boomerang')
         monster_chances['kobold low_level'] = 0 
         monster_chances['kobold mid_level'] = 0
         monster_chances['kobold high_level'] = 0
-        monster_chances['desert worm'] = 95
+        if dungeon_level == 0:
+            monster_chances['desert worm'] = 95
+            monster_chances['anangu hunter'] = 5
+        else:
+            monster_chances['anangu hunter'] = 95
     if dungeon_name not in lair_name and dungeon_level > 2:
         monster_chances['kobold champion'] = 5
  
@@ -2018,6 +2027,10 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         fighter_component = Fighter(hp=2, defense=2, power=2, xp=3, death_function=monster_death_no_loot,state='wandering')
         ai_component = BasicMonster()
         monster = Object(x, y, '~', 'desert worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name == 'anangu hunter':
+        fighter_component = Fighter(hp=5, defense=1, power=6, xp=35, death_function=monster_death,state=random.choice(['wandering','friendly'])
+        ai_component = BasicMonster()
+        monster = Object(x, y, '@', 'anangu hunter', libtcod.white,blocks=True, fighter=fighter_component, ai=ai_component)
     else:
         fighter_component = Fighter(hp=1, defense=0, power=1, xp=3, death_function=monster_death_no_loot,state='wandering')
         ai_component = BasicMonster()
@@ -2052,7 +2065,7 @@ def add_dragon():
 
 def addShaiHulud(x,y):
     global objects
-    fighter_component = Fighter(hp=30, defense=12, power=8, xp=800, death_function=dragon_death)
+    fighter_component = Fighter(hp=30, defense=12, power=8, xp=800, death_function=monster_death)
     ai_component = BasicMonster()
     monster = Object(x, y, 'O', 'shai-hulud head', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     fighter_component = Fighter(hp=6, defense=10, power=0, xp=5, death_function=monster_death)
@@ -3202,9 +3215,22 @@ def monster_death(monster):
         addItem('metal armour',monster.x, mosnter.y)
         addItem('elm',monster.x, monster.y)
         addItem('long sword',monster.x,monster.y)
-        
-                                                     
-    if monster.name.split()[0] in ['dragon'] and not monster.name.split()[1] in ['head']:
+    elif monster.name in ['anangu hunter']:
+        if random.randint(1,3) == 3:
+            addItem('wooden boomerang',monster.x, monster.y)
+        else:
+            addItem('wooden spear',monster.x,monster.y)
+    elif monster.name.split()[0] in ['shai-hulud']:
+        if monster.name.split()[1] == 'head':
+            Object(monster.x, monster.y, '%', 'dead freman', libtcod.red, blocks=False, ai=DeadBody(monster))
+            addItem('still suit',monster.x, monster.y)
+            addItem('crysknife',monster.x, monster.y)
+        else:
+            for obj in objects:
+                if obj.name == 'shai-hulud head':
+                   obj.fighter.defense -= 1
+                   obj.fighter.hp -= 2
+    elif monster.name.split()[0] in ['dragon'] and not monster.name.split()[1] in ['head']:
         for obj in objects:
             if obj.name == 'dragon head':
                obj.fighter.defense -= 1
@@ -3261,8 +3287,7 @@ def monster_death_no_loot(monster):
     monster.name = 'dead ' + monster.name
     #add new object of the tipe "ammo"
     monster.send_to_back()
-
-    
+   
 def target_tile(max_range=None):
     global key, mouse
     #return the position of a tile left-clicked in player's FOV (optionally in a range), or (None,None) if right-clicked.
@@ -3384,7 +3409,6 @@ def load_game():
     dialogs = Dialogs()
     dialogs.loadFromFile()
 
- 
 def new_game():
     global player, inventory, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects, notifications, dungeon_name, kobolds_killed
  
