@@ -1324,8 +1324,8 @@ def make_world_map(grassness=20,start=False):
     
     c = place_thing(CHAR_DIRT,7, False, 6)
     player.x, player.y = c
-    addItem('stone',player.x -4, player.y -4)
-    addItem('stone',player.x +4, player.y -3)
+    addItem('rock',player.x -4, player.y -4)
+    addItem('rock',player.x +4, player.y -3)
     if start:
         map[player.x-2][player.y-2] = Tile(True,terrain='-')
         map[player.x-1][player.y-2] = Tile(True,terrain='X')
@@ -1843,6 +1843,7 @@ def place_objects(room):
         monster_chances['kobold high_level'] = 5
         monster_chances['wolf animal'] = 25
     if dungeon_name.split()[1] in ['desert']:
+        items.append('rock')
         monster_chances['kobold low_level'] = 0 
         monster_chances['kobold mid_level'] = 0
         monster_chances['kobold high_level'] = 0
@@ -1911,13 +1912,13 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'long sword':
         equipment_component = Equipment(slot='right hand', power_bonus=2)
         item = Object(x, y, '-', 'long sword', libtcod.silver, equipment=equipment_component)
-    elif name == 'stone':
+    elif name == 'rock':
         if random.randint(1,2) == 2:
             equipment_component = Equipment(slot='right hand', power_bonus=1)
-            item = Object(x, y, '*', 'small stone', libtcod.silver, equipment=equipment_component)
+            item = Object(x, y, '*', 'small rock', libtcod.silver, equipment=equipment_component)
         else:
             equipment_component = Equipment(slot='right hand', power_bonus=2)
-            item = Object(x, y, '*', 'large stone', libtcod.silver, equipment=equipment_component)
+            item = Object(x, y, '*', 'large rock', libtcod.silver, equipment=equipment_component)
     elif name == 'shirt':
         equipment_component = Equipment(slot='body', defense_bonus=0)
         st = random.choice(['hawaiian ','business ','white t-','manowar t-','ulver t-','abba t-','radiohead t-','old t-','pink ','sleeveless ','colorful poncho','clean toga','dirty rags'])
@@ -2824,7 +2825,7 @@ def handle_keys():
             if key_char in ['q','Q'] or key.vk == libtcod.KEY_KP1:
                 curr_weap = get_equipped_in_slot('right hand')
                 weap_2 = get_equipped_in_slot('left hand')
-                throwable = ['spear','bow','boomerang','stick','stone']
+                throwable = ['spear','bow','boomerang','stick','rock']
                 if curr_weap is None or curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in throwable:
                     if weap_2 is not None and weap_2.owner.name.split(' ')[1] in throwable:
                         curr_weap = weap_2
@@ -2930,7 +2931,7 @@ def handle_keys():
                                 notifications.append(Notif('(',3,_x,player.y))
                     if not fit is None:
                         notifications.append(Notif('*',5,_x,_y))
-                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','stone']:
+                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','rock']:
                             message('you threw your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
                             i_name = curr_weap.owner.name
                             for it in inventory:
@@ -2942,7 +2943,7 @@ def handle_keys():
                         fit.fighter.take_damage(dmg)
                     else:
                         message('you threw your {} at nothing'.format(curr_weap.owner.name))
-                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','stone']:
+                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','rock']:
                             i_name = curr_weap.owner.name
                             for it in inventory:
                                 if it.name == i_name:
@@ -3133,7 +3134,7 @@ def end_screen(player):
         title = 'rambo'
         equip = 'bad-assery'
 
-    if (rhand is not None and rhand.owner.name.split()[1] == 'stone' and lhand is not None and lhand.owner.name.split()[1] == 'stick') or (rhand is not None and rhand.owner.name.split()[1] =='stick' and lhand is not None and lhand.owner.name.split()[1] == 'stone'):
+    if (rhand is not None and rhand.owner.name.split()[1] == 'rock' and lhand is not None and lhand.owner.name.split()[1] == 'stick') or (rhand is not None and rhand.owner.name.split()[1] =='stick' and lhand is not None and lhand.owner.name.split()[1] == 'rock'):
         equip = 'sticks & stones'
         if title != '':
             title += ', bone breaker'
