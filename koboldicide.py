@@ -2407,7 +2407,7 @@ def get_color(t):
             color = libtcod.light_sepia
         elif t == CHAR_LAKE:
             color = libtcod.blue
-        elif t == CHAR_STAIRS:
+        elif t in [CHAR_STAIRS,CHAR_SAND]:
             color = libtcod.light_yellow
         elif t == CHAR_TALL_GRASS or t == CHAR_FOREST:
             color = libtcod.darker_green
