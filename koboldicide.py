@@ -1,8 +1,9 @@
 #!/usr/bin/python
 #
-
-# with special thanks to Jotaf for his tutorial
+# green over black presents
+#                                  koboldicide!
 #
+# with special thanks to Jotaf for his tutorial
  
 import libtcodpy as libtcod
 import math
@@ -106,6 +107,7 @@ def get_dungeon_name(x,y):
     for d in dung_list:
         if d.x == x and d.y == y:
             return d.name
+    return 'no where'
 
 
 class Dialog:
@@ -595,8 +597,46 @@ class DeadBody:
         else:
             objects.remove(self.monster)
 
+class ShaiHulud:
+    def __init__(self):
+        self.turn = 0
+        self.previous = self
+
+    def take_turn(self):
+        global objects
+        print 'taking turn {}'.format(self.turn)
+        monster = self.owner
+        self.turn += 1
+        if self.turn == 2:
+            ai_component = Body(monster)
+            fighter_component = Fighter(hp=6, defense=10, power=0, xp=5, death_function=monster_death)
+            monster_body = Object(monster.x,monster.y-1, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+            objects.append(monster_body)
+            self.previous = monster_body
+        elif self.turn == 3:
+            fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
+            ai_component = Body(self.previous)
+            monster_body = Object(monster.x,monster.y-2, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+            objects.append(monster_body)
+            self.previous = monster_body
+        elif self.turn == 4:
+            fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
+            ai_component = Body(self.previous)
+            monster_body3 = Object(monster.x,monster.y-3, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+            objects.append(monster_body)
+            self.previous = monster_body
+        elif self.turn == 5:
+            fighter_component = Fighter(hp=6, defense=5, power=2, xp=5, death_function=monster_death)
+            ai_component = Body(self.previous)
+            monster_tail = Object(monster.x,monster.y-4, 'o', 'shai-hulud tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+            objects.append(monster_tail)
+            self.previous = monster_tail
+        elif self.turn >= 5:
+            monster.ai = BasicMonster()
+        else:
+            monster.move_towards(player.x, player.y)
+
 class BasicMonster:
-        
     #AI for a basic monster.
     def take_turn(self):
         #a basic monster takes its turn. if you can see it, it can see you
@@ -1258,7 +1298,7 @@ def make_world_map(grassness=20,start=False):
     for i in range(0,25):
         n =  generateName(3)
         name_list.append(n)
-    #print name_list
+    
     if (grassness > MAP_WIDTH / 6):
         grassness = int(MAP_WIDTH / 6)
 
@@ -1339,9 +1379,6 @@ def make_world_map(grassness=20,start=False):
 
     lair_name = random.choice(possible_lairs)
     #print 'dragon @[{}]'.format(lair_name)
-
-
-
 
 def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
     global map, objects, stairs, lair_name, dungeon_level
@@ -1847,9 +1884,9 @@ def place_objects(room):
         monster_chances['kobold low_level'] = 0 
         monster_chances['kobold mid_level'] = 0
         monster_chances['kobold high_level'] = 0
-        if dungeon_level == 0:
-            monster_chances['desert worm'] = 95
+        if dungeon_level == 1:
             monster_chances['anangu hunter'] = 5
+            monster_chances['desert worm'] = 95
         else:
             monster_chances['anangu hunter'] = 95
     if dungeon_name not in lair_name and dungeon_level > 2:
@@ -1906,6 +1943,9 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'combat knife':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
         item = Object(x, y, '-', 'combat knife', libtcod.light_grey, equipment=equipment_component)
+    elif name == 'crysknife':
+        equipment_component = Equipment(slot='right hand', power_bonus=3)
+        item = Object(x, y, '-', 'crys knife', libtcod.white, equipment=equipment_component)
     elif name == 'pocket knife':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
         item = Object(x, y, '-', 'pocket knife', libtcod.light_grey, equipment=equipment_component)
@@ -1928,6 +1968,9 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'leather armour':
         equipment_component = Equipment(slot='body', defense_bonus=2)
         item = Object(x, y, 'a', 'leather armour', libtcod.sepia, equipment=equipment_component)
+    elif name == 'still suit':
+        equipment_component = Equipment(slot='body', defense_bonus=2, power_bonus=1)
+        item = Object(x, y, 's', 'still suit', libtcod.sepia, equipment=equipment_component)
     elif name == 'metal armour':
         equipment_component = Equipment(slot='body', defense_bonus=3)
         item = Object(x, y, 'a', 'metal armour', libtcod.silver, equipment=equipment_component)
@@ -2029,7 +2072,7 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         ai_component = BasicMonster()
         monster = Object(x, y, '~', 'desert worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
     elif name == 'anangu hunter':
-        fighter_component = Fighter(hp=5, defense=1, power=6, xp=35, death_function=monster_death,state=random.choice(['wandering','friendly'])
+        fighter_component = Fighter(hp=5, defense=1, power=6, xp=35, death_function=monster_death,state=random.choice(['wandering','friendly']))
         ai_component = BasicMonster()
         monster = Object(x, y, '@', 'anangu hunter', libtcod.white,blocks=True, fighter=fighter_component, ai=ai_component)
     else:
@@ -2064,28 +2107,16 @@ def add_dragon():
     objects.append(monster_body3)
     objects.append(monster_tail)
 
+
 def addShaiHulud(x,y):
     global objects
+    message('shai-hulud appears!', libtcod.bright_red)
+    y-=2
     fighter_component = Fighter(hp=30, defense=12, power=8, xp=800, death_function=monster_death)
-    ai_component = BasicMonster()
+    ai_component = ShaiHulud()
     monster = Object(x, y, 'O', 'shai-hulud head', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=6, defense=10, power=0, xp=5, death_function=monster_death)
-    ai_component = Body(monster)
-    monster_body = Object(x,y-1, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
-    ai_component = Body(monster_body)
-    monster_body2 = Object(x,y-2, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
-    ai_component = Body(monster_body)
-    monster_body3 = Object(x,y-3, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
-    fighter_component = Fighter(hp=6, defense=5, power=2, xp=5, death_function=monster_death)
-    ai_component = Body(monster_body)
-    monster_tail = Object(x,y-4, 'o', 'shai-hulud tail', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
     objects.append(monster)
-    objects.append(monster_body)
-    objects.append(monster_body2)
-    objects.append(monster_body3)
-    objects.append(monster_tail)
+
 
 
 def nothing():
@@ -2274,10 +2305,12 @@ def get_names(x,y):
 
     names = [obj.name for obj in objects
              if obj.x == x and obj.y == y and obj.name != 'dot' and obj.name != 'stairs']
-    if names in ['<','>'] and dungeon_level == 0:
-        out_names = get_dungeon_name(x,y)
+
+
+    if dungeon_level == 0 and get_dungeon_name(x,y) != 'no where':
+        return get_dungeon_name(x,y)
     elif len(names) < 1:
-        out_names = get_terrain_name(map[x][y].terrain)
+        return get_terrain_name(map[x][y].terrain)
     else:
         names.sort()
         nm_old = ''
@@ -3213,7 +3246,7 @@ def monster_death(monster):
         elif _drop_ <= 20:
             objects.append(Object(monster.x, monster.y, '$', 'money', libtcod.yellow, always_visible=True))
     elif monster.name in ['kobold champion']:
-        addItem('metal armour',monster.x, mosnter.y)
+        addItem('metal armour',monster.x, monster.y)
         addItem('elm',monster.x, monster.y)
         addItem('long sword',monster.x,monster.y)
     elif monster.name in ['anangu hunter']:
@@ -3273,7 +3306,7 @@ def monster_death_no_loot(monster):
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
     if monster.name == 'desert worm':
-        if random.randint(1,99) == 77:
+        if random.randint(1,99) >= 77:
             addShaiHulud(monster.x,monster.y)
         else:
             addMonster('desert worm', monster.x-3, monster.y-3)
@@ -3643,7 +3676,7 @@ def main_menu():
         #show options and wait for the player's choice
         #_continue = arrow_menu('continue ?',['   yes','    no'],12,0,12,12)
         #choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 25,10)
-        libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_NONE, libtcod.RIGHT, '7DKoboldicider <--------')          
+        libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_NONE, libtcod.RIGHT, 'Koboldicider <--------')          
         choice = arrow_menu('welcome, koboldicider',['into the game!', 'please help?', 'i wanna quit.'],40,0,20,15)
 
  
@@ -3653,7 +3686,7 @@ def main_menu():
         if choice == 1:  #show help screen
             libtcod.console_set_default_background(0, libtcod.black)
 
-            libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_SET, libtcod.RIGHT, '7DKoboldicider <--------')           
+            libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_SET, libtcod.RIGHT, 'Koboldicider <--------')           
             libtcod.console_print_ex(0, 60, 12, libtcod.BKGND_SET, libtcod.RIGHT, 'move with [w,a,s,d] or kp[8,4,6,2] or [arrow keys]')         
             libtcod.console_print_ex(0, 60, 13, libtcod.BKGND_SET, libtcod.RIGHT, 'attack the square you are facing        [f or kp9]')         
             libtcod.console_print_ex(0, 60, 14, libtcod.BKGND_SET, libtcod.RIGHT, 'use, pick up, talk, go up/down          [e or kp7]')         
