@@ -69,7 +69,7 @@ DEFAULT_ATTACK_SPEED = 1
  
 FOV_ALGO = 1  #default FOV algorithm
 FOV_LIGHT_WALLS = True  #light walls or not
-TORCH_RADIUS = 10
+TORCH_RADIUS = 35
  
 LIMIT_FPS = 20  #20 frames-per-second maximum
  
@@ -90,6 +90,7 @@ CHAR_DIRT = '.'
 CHAR_ROAD = '_'
 CHAR_FOREST = 'T'
 CHAR_LAKE = '~'
+CHAR_ICE = ':'
 CHAR_MOUNTAIN = '#'
 CHAR_STAIRS = '<'
 CHAR_DOOR = ']'
@@ -165,7 +166,7 @@ class Tile:
         #by default, if a tile is blocked, it also blocks sight
 
         self.terrain = terrain
-        if self.terrain in [CHAR_LAKE,CHAR_FOREST,CHAR_MOUNTAIN]:
+        if self.terrain in [CHAR_LAKE,CHAR_FOREST,CHAR_MOUNTAIN,CHAR_ICE]:
             self.blocked = True
             if self.terrain in [CHAR_FOREST, CHAR_MOUNTAIN]:
                 self.block_sight = True
@@ -184,6 +185,8 @@ class Tile:
         self.color = libtcod.green
         if self.terrain == CHAR_MOUNTAIN or self.terrain == CHAR_DIRT:
             self.color = libtcod.light_sepia
+        elif self.terrain == CHAR_ICE:
+            self.color = libtcod.light_cyan
         elif self.terrain == CHAR_LAKE:
             self.color = libtcod.blue
             self.block_sight = False
@@ -622,7 +625,7 @@ class ShaiHulud:
         elif self.turn == 4:
             fighter_component = Fighter(hp=6, defense=7, power=0, xp=5, death_function=monster_death)
             ai_component = Body(self.previous)
-            monster_body3 = Object(monster.x,monster.y-3, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
+            monster_body = Object(monster.x,monster.y-3, 'o', 'shai-hulud body', libtcod.darker_red,blocks=True, fighter=fighter_component, ai=ai_component)
             objects.append(monster_body)
             self.previous = monster_body
         elif self.turn == 5:
@@ -632,7 +635,22 @@ class ShaiHulud:
             objects.append(monster_tail)
             self.previous = monster_tail
         elif self.turn >= 5:
-            monster.ai = BasicMonster()
+            _dist = int(monster.distance_to(player))
+            if _dist < 20:
+                notifications.append(Notif('*',4,monster.x-1,monster.y-1))
+                if _dist > 10:
+                    notifications.append(Notif('?',4,monster.x-1,monster.y-1))
+                    self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+                    if player.x != monster.x and player.y != monster.y:
+                        monster.fighter.state = 'watchfull'
+                elif _dist > 1:
+                    notifications.append(Notif('!',4,monster.x-1,monster.y-1,libtcod.red))
+                    monster.move_towards(player.x, player.y)
+                #close enough, attack! (if the player is still alive.)
+                else:
+                    notifications.append(Notif('x',4,monster.x-1,monster.y-1,libtcod.light_red))
+                    monster.fighter.attack(player)
+
         else:
             monster.move_towards(player.x, player.y)
 
@@ -685,6 +703,49 @@ class BasicMonster:
             self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
         #print ai
 
+class Squad:
+    def __init__(self, leader):
+        self.leader = leader
+        self.followers = []
+
+    def addFollower(follower):
+        self.followers.append(follower)
+
+class SquadMonster:
+    def __init__(self,squad):
+        self.squad = squad
+
+    #AI for a basic monster.
+    def take_turn(self):
+        monster = self.owner
+        state = monster.fighter.state
+        _dist_lead = int(monster.distance_to(self.leader))
+        _dist_play = int(monster.distance_to(player))
+
+        if state in ['aggressive']:
+            ai = "{}@[{},{}]?".format(monster.name, monster.x, monster.y)
+            if _dist_player > 5:
+                if _dist_lead > 2:
+                    _lead = self.squad.leader.owner
+                    monster.move_towards(_lead.x, _lead.y)
+                else:
+                    notifications.append(Notif('..',4,monster.x,monster.y-1))
+            else:
+                if _dist_player > 1:
+                    ai+=", !"
+                    notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                    monster.move_towards(player.x, player.y)
+                #close enough, attack! (if the player is still alive.)
+                else:
+                    ai+=", X"
+                    notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
+                    monster.fighter.attack(player)
+        else:
+            if _dist_lead > 2:
+                _lead = self.squad.leader.owner
+                monster.move_towards(_lead.x, _lead.y)
+            else:
+                notifications.append(Notif('..',4,monster.x,monster.y-1))
 class Shopowner:
         
     #AI for a basic monster.
@@ -698,7 +759,6 @@ class Shopowner:
         if _dist < 20:
             if state in ['aggressive']:
                 notifications.append(Notif('*',4,monster.x,monster.y-1))
-                ai+=", _dist[{}]".format(_dist)
                 if _dist <=1:
                      monster.fighter.attack(player)
                 elif _dist > 1:
@@ -901,6 +961,7 @@ class Fighter:
             message(self.owner.name + ' misses ' + target.name+ ". " + "{}".format(roll_history))
  
     def take_damage(self, damage):
+        global objects
         #apply damage if possible
         if damage > 0:
             self.hp -= damage
@@ -923,6 +984,17 @@ class Fighter:
         if self.state == 'friendly':
             self.state = 'watchfull'
         elif self.state not in ['friendly','aggressive']:
+            print 'i am [{}]'.format(self.owner.name)
+            if len(self.owner.name.split()) <= 1:
+                return
+            for m in objects:
+
+                if len(m.name.split()) <= 1:
+                    continue
+                if m.name.split()[0] == self.owner.name.split()[0] or m.name.split()[1] == self.owner.name.split()[1]:
+                    _dist = int(self.owner.distance_to(m))
+                    if _dist < TORCH_RADIUS and m.fighter:
+                        m.fighter.set_state('aggressive') 
             self.state = 'aggressive'
  
     def heal(self, amount):
@@ -1147,7 +1219,8 @@ def get_available_slots():
             if obj.name.split()[1] in ['backpack','bag'] or obj.name.split()[0] in ['bag']:
                 for i in range(0, obj.equipment.capacity):
                     slots.append('{} {}'.format(obj.name.split()[1],i))
-            slots.remove(obj.equipment.slot)
+            if obj.equipment.slot in slots:
+                slots.remove(obj.equipment.slot)
     return slots
 
 def get_equipped_by_name(name):  #returns the equipment in a slot, or None if it's empty
@@ -1228,17 +1301,30 @@ def create_v_tunnel(y1, y2, x):
  
 def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
     if _wid == -1:
-        _wid = Mint(MAP_WIDTH / 20)
+        _wid = int(MAP_WIDTH / 20)
+        x_wid = _wid
 
     global map, stairs
     _center = Tile(True,terrain=thing)
     startC = _wid +1
     if thing in [CHAR_TALL_GRASS]:
         startC += 2
-
+    if thing in [CHAR_SAND]:
+        _startY = MAP_HEIGHT/2
+        _endY = _startY + _wid
+        _startY -= _wid
+        x_wid = _wid
+    elif thing in [CHAR_ICE]:
+        _startY = 0
+        x_wid = 20
+        _endY = 1
+    else:
+        _startY = startC
+        x_wid = _wid
+        _endY = MAP_HEIGHT-1-_wid
     #print 'mwid[{}]mhei[{}] wid[{}]'.format(MAP_WIDTH,MAP_HEIGHT,_wid)
-    _x = random.randint(startC,MAP_WIDTH-1-_wid);
-    _y = random.randint(startC,MAP_HEIGHT-1-_wid);
+    _x = random.randint(startC,MAP_WIDTH-1-_wid)
+    _y = random.randint(_startY,_endY)
     if sparse > 0:
         acceptable = [CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_GRASS]
     else:
@@ -1247,15 +1333,15 @@ def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
     done = False
     while not done:
             _x = random.randint(startC,MAP_WIDTH)
-            _y = random.randint(startC,MAP_HEIGHT)
-            if _x+_wid >= MAP_WIDTH or _y +_wid >= MAP_HEIGHT: # or _x-_wid < 0 or _y -_wid < 0:
+            _y = random.randint(_startY,_endY)
+            if _x+x_wid >= MAP_WIDTH or _y +_wid >= MAP_HEIGHT: # or _x-_wid < 0 or _y -_wid < 0:
                 #print 'x{},y{} unnaceptable, sent them home.'.format(_x,_y)
                 continue
             if thing in [CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_GRASS]:
                 done = True
 
             done = True
-            for __x in range(_x-_wid,_x+_wid):
+            for __x in range(_x-x_wid,_x+x_wid):
                 for __y in range(_y-_wid, _y+_wid):
                     if map [__x][__y].terrain not in acceptable:
                         done = False
@@ -1269,7 +1355,7 @@ def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
     if thing not in [CHAR_LONG_GRASS]: 
         placed_entry = False
 
-    for _xx in range(max(0,_x-_wid),min(_x+_wid,MAP_WIDTH)):
+    for _xx in range(max(0,_x-x_wid),min(_x+x_wid,MAP_WIDTH)):
         for _yy in range(max(0,_y-_wid),min(_y+_wid,MAP_HEIGHT)):
             if map[_xx][_yy].terrain in acceptable:
                 if random.randint(0,5) < sparse :
@@ -1285,7 +1371,7 @@ def place_thing(thing,_wid=-1,has_stairs=True,sparse=2):
                 map[_xx][_yy] = Tile(True,terrain=thing)
     if not placed_entry and has_stairs:
         map[_xx][_yy] = Tile(False,terrain=CHAR_STAIRS)
-        stairs = Object(_x-_wid, _y-_wid, '<', 'stairs', libtcod.white, always_visible=True)
+        stairs = Object(_x-x_wid, _y-_wid, '<', 'stairs', libtcod.white, always_visible=True)
 
     return s_thing
 
@@ -1330,12 +1416,19 @@ def make_world_map(grassness=20,start=False):
     n = random.choice(name_list)
     name_list.remove(n)
     dung_list.append(Dungeon('{}\'s forest'.format(n),stairs.x, stairs.y))
+
     place_thing(CHAR_LAKE,6,True,3);
     objects.append(stairs)
     n = random.choice(name_list)
     name_list.remove(n)
     n += random.choice([' city',' town',' ville'])
     dung_list.append(Dungeon('{} '.format(n),stairs.x, stairs.y))
+
+    place_thing(CHAR_ICE,6,True,3);
+    objects.append(stairs)
+    n = 'north pole'
+    dung_list.append(Dungeon('{} '.format(n),stairs.x, stairs.y))
+
 
     for _x in range(2,4):
         place_thing(CHAR_MOUNTAIN,3,True,3);
@@ -1359,6 +1452,7 @@ def make_world_map(grassness=20,start=False):
         objects.append(stairs)
         n = random.choice(name_list)
         name_list.remove(n)
+        possible_lairs.append(n)
         dung_list.append(Dungeon('{} desert'.format(n),stairs.x, stairs.y))
 
     
@@ -1441,6 +1535,14 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
         min_rooms = 4
         max_rooms_here = 8
         _stairs_ = True
+
+    elif terrain == CHAR_ICE:
+        margin = 5
+        r_max = 45
+        r_min = 20
+        min_rooms = 4
+        max_rooms_here = 8
+        _stairs_ = False
 
     if name != lair_name and dungeon_level > 2:
         _stairs_ = False
@@ -1872,6 +1974,11 @@ def place_objects(room):
     #chance of each item (by default they have a chance of 0 at level 1, which then goes up)
     item_chances = {}
     items = ['wooden stick']
+    if dungeon_name.split()[1] in ['pole']:
+        monster_chances['kobold low_level'] = 0 
+        monster_chances['kobold mid_level'] = 0
+        monster_chances['kobold high_level'] = 0
+        monster_chances['walrus warrior'] = 95
     if dungeon_name.split()[1] in ['woods']:
         items.append('bag')
     if dungeon_name.split()[1] in ['woods','forest']:
@@ -2019,7 +2126,7 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
     if state == 'none':
         if name.split()[0] in ['low_level','kobold']:
             state = random.choice(['aggressive','watchfull'])
-        elif name.split()[0] in ['worm','wolf']:
+        elif name.split()[0] in ['worm','wolf','wallrus']:
             state = 'neutral'
             name = '{} animal'.format(name)
     personal_name = generateName()
@@ -2035,8 +2142,12 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         fighter_component = Fighter(hp=6, defense=8, power=1, xp=0, death_function=monster_death, state='friendly')
         ai_component = Shopowner()
         monster = Object(x, y, '@', 'farmer {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name == 'walrus warrior':
+        fighter_component = Fighter(hp=8, defense=2, power=2, xp=0, death_function=monster_death, state='friendly')
+        ai_component = BasicMonster()
+        monster = Object(x, y, 'W', 'walrus warrior {}'.format(personal_name), libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
     elif name in ['old man','wise man']:
-        fighter_component = Fighter(hp=8, defense=9, power=9, xp=0, death_function=monster_death, state='friendly')
+        fighter_component = Fighter(hp=8, defense=9, power=9, xp=0, death_function=wolf_death, state='friendly')
         ai_component = Shopowner()
         monster = Object(x, y, '@', name, libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
     elif name in ['lumberjack','leathersmith','blacksmith','nurse']:
@@ -2110,7 +2221,7 @@ def add_dragon():
 
 def addShaiHulud(x,y):
     global objects
-    message('shai-hulud appears!', libtcod.bright_red)
+    message('shai-hulud appears!', libtcod.light_red)
     y-=2
     fighter_component = Fighter(hp=30, defense=12, power=8, xp=800, death_function=monster_death)
     ai_component = ShaiHulud()
@@ -2161,7 +2272,7 @@ def horizontal_menu(header, options, width, value = 0, x_offset = 0, y_offset = 
         #blit the contents of "window" to the root console
         x = 2 #SCREEN_WIDTH/2 - width/2
         #y = 4 #SCREEN_HEIGHT/2 - height/2
-        libtcod.console_blit(window, 0, 0, width, height, 0, x+x_offset, y+y_offset, 1.0, 0.7)
+        libtcod.console_blit(window, 0, 0, width, height, 0, x+x_offset, y+y_offset, 1.0, 1.0)
      
         #present the root console to the player and wait for a key-press
         libtcod.console_flush()
@@ -2232,7 +2343,7 @@ def arrow_menu(header, options, width, selection = 0, x_offset = 0, y_offset = 0
         #blit the contents of "window" to the root console
         x = 2 #SCREEN_WIDTH/2 - width/2
         #y = 4 #SCREEN_HEIGHT/2 - height/2
-        libtcod.console_blit(window, 0, 0, width, height, 0, x+x_offset, y+y_offset, 1.0, 0.7)
+        libtcod.console_blit(window, 0, 0, width, height, 0, x+x_offset, y+y_offset, 1.0, 1.0)
      
         #present the root console to the player and wait for a key-press
         libtcod.console_flush()
@@ -2495,7 +2606,7 @@ def mini_map(stop = True):
     #blit the contents of "window" to the root console
     x = int(SCREEN_WIDTH / 3)
     y = int(SCREEN_HEIGHT / 3)
-    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 1.0)
  
     #present the root console to the player and wait for a key-press
     if stop:
@@ -2675,7 +2786,7 @@ def message(new_msg, color = libtcod.white):
         #add the new line as a tuple, with the text and the color
         game_msgs.append( (line, color) )
 
-def player_move_or_attack(dx, dy, move=True):
+def player_move_or_attack(dx, dy, move=True,force=False):
     global fov_recompute, notifications
     
     #the coordinates the player is moving to/attacking
@@ -2694,8 +2805,12 @@ def player_move_or_attack(dx, dy, move=True):
     target = None
     for object in objects:
         if object.fighter and object.x == x and object.y == y:
-            target = object
-            break
+            if object.fighter.state not in ['friendly','wandering'] or force:
+                target = object
+                break
+            elif object.fighter.state in ['friendly','wandering']:
+                st = random.choice(['yes?','watch it!','i like you too?','uuh, touch me','keep rubbing'])
+                object.fighter.talk(st)
 
     #attack if target found, move otherwise
     if target is not None:
@@ -2737,7 +2852,7 @@ def menu(header, options, width,offset=0):
     #blit the contents of "window" to the root console
     x = SCREEN_WIDTH/2 - width/2 + offset
     y = SCREEN_HEIGHT/2 - height/2
-    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 1.0)
  
     #present the root console to the player and wait for a key-press
     libtcod.console_flush()
@@ -2771,7 +2886,7 @@ def inventory_menu(header):
     if index is -1 or len(inventory) == 0: return None
     return inventory[index].item
  
-def msgbox(text, width=50):
+def msgbox(text, width=40):
     menu(text, [], width,offset=-3)  #use menu() as a sort of "message box"
  
 def handle_keys():
@@ -2999,16 +3114,16 @@ def handle_keys():
                     if not strangle:
                         return 'nop'
                     if orien == EAST:
-                        if player_move_or_attack(1, 0,False):
+                        if player_move_or_attack(1, 0,False,True):
                             message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
                     elif orien == WEST:
-                        if player_move_or_attack(-1, 0,False):
+                        if player_move_or_attack(-1, 0,False,True):
                             message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
                     elif orien == NORTH:
-                        if player_move_or_attack(0, -1,False):
+                        if player_move_or_attack(0, -1,False,True):
                             message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
                     elif orien == SOUTH:
-                        if player_move_or_attack(0, 1,False):
+                        if player_move_or_attack(0, 1,False,True):
                             message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
                 swingable = ['sword','axe','stick']
                 pokable = ['spear','whip']
@@ -3020,7 +3135,7 @@ def handle_keys():
                         notifications.append(Notif('/',2,player.x+1,player.y-1))
                         notifications.append(Notif('-',3,player.x+1,player.y))
                         notifications.append(Notif('\\',4,player.x+1,player.y+1))
-                        if not player_move_or_attack(1, 0,False) and not player_move_or_attack(1, -1,False) and not player_move_or_attack(1, 1,False):
+                        if not player_move_or_attack(1, 0,False,True) and not player_move_or_attack(1, -1,False,True) and not player_move_or_attack(1, 1,False,True):
                             swing_sword(player.x+1,player.y-1)
                             swing_sword(player.x+1,player.y+1)
                             return 'attack'
@@ -3030,7 +3145,7 @@ def handle_keys():
                         notifications.append(Notif('\\',2,player.x-1,player.y-1))
                         notifications.append(Notif('|',3,player.x,player.y-1))
                         notifications.append(Notif('/',4,player.x+1,player.y-1))
-                        if not player_move_or_attack(1, -1,False) and not player_move_or_attack(-1, -1,False) and not player_move_or_attack(0, -1,False):
+                        if not player_move_or_attack(1, -1,False,True) and not player_move_or_attack(-1, -1,False,True) and not player_move_or_attack(0, -1,False,True):
                             swing_sword(player.x-1,player.y-1)
                             swing_sword(player.x+1,player.y-1)
                             return 'attack'
@@ -3040,7 +3155,7 @@ def handle_keys():
                         notifications.append(Notif('\\',2,player.x-1,player.y-1))
                         notifications.append(Notif('-',3,player.x-1,player.y))
                         notifications.append(Notif('/',4,player.x-1,player.y+1))
-                        if not player_move_or_attack(-1, 0,False) and not player_move_or_attack(-1, -1,False) and not player_move_or_attack(-1, 1,False):  
+                        if not player_move_or_attack(-1, 0,False,True) and not player_move_or_attack(-1, -1,False,True) and not player_move_or_attack(-1, 1,False,True):  
                             swing_sword(player.x-1,player.y-1)
                             swing_sword(player.x-1,player.y+1)
                             return 'attack'
@@ -3050,7 +3165,7 @@ def handle_keys():
                         notifications.append(Notif('/',2,player.x-1,player.y+1))
                         notifications.append(Notif('|',3,player.x,player.y+1))
                         notifications.append(Notif('\\',4,player.x+1,player.y+1))
-                        if not player_move_or_attack(0, 1,False) and not player_move_or_attack(+1, 1,False) and not player_move_or_attack(-1, 1,False):
+                        if not player_move_or_attack(0, 1,False,True) and not player_move_or_attack(+1, 1,False,True) and not player_move_or_attack(-1, 1,False,True):
                             swing_sword(player.x-1,player.y+1)
                             swing_sword(player.x+1,player.y+1)
                             return 'attack'
@@ -3059,49 +3174,49 @@ def handle_keys():
                 elif (curr_weap is not None and curr_weap.owner.name.split(' ')[1] in pokable and weap_2 is not None and weap_2.owner.name.split()[1] in swingable) or (curr_weap is None and weap_2 is not None and weap_2.owner.name.split(' ')[1] in pokable):
                     if player.fighter.orientation == EAST:
                         notifications.append(Notif('-',3,player.x+1,player.y))
-                        if not player_move_or_attack(1, 0,False):
+                        if not player_move_or_attack(1, 0,False,True):
                             return 'attack'
                         else:
                             return 'nop'
                     elif player.fighter.orientation == NORTH:
                         notifications.append(Notif('|',3,player.x,player.y-1))
-                        if not player_move_or_attack(1, -1,False):
+                        if not player_move_or_attack(1, -1,False,True):
                             return 'attack'
                         else:
                             return 'nop'
                     elif player.fighter.orientation == WEST:
                         notifications.append(Notif('-',3,player.x-1,player.y))
-                        if not player_move_or_attack(-1, 0,False):  
+                        if not player_move_or_attack(-1, 0,False,True):  
                             return 'attack'
                         else:
                             return 'nop'
                     elif player.fighter.orientation == SOUTH:
                         notifications.append(Notif('|',3,player.x,player.y+1))
-                        if not player_move_or_attack(0, 1,False):
+                        if not player_move_or_attack(0, 1,False,True):
                             return 'attack'
                         else:
                             return 'nop'
                 else:
                     if player.fighter.orientation == EAST:
-                        if not player_move_or_attack(1, 0,False):
+                        if not player_move_or_attack(1, 0,False,True):
                             swing_sword(player.x+1,player.y)
                             return 'attack'
                         else:
                             return 'nop'
                     elif player.fighter.orientation == NORTH:
-                        if not player_move_or_attack(0, -1,False):
+                        if not player_move_or_attack(0, -1,False,True):
                             swing_sword(player.x,player.y-1)
                             return 'attack'
                         else:
                             return 'nop'
                     elif player.fighter.orientation == WEST:
-                        if not player_move_or_attack(-1, 0,False): 
+                        if not player_move_or_attack(-1, 0,False,True): 
                             swing_sword(player.x-1,player.y)
                             return 'attack'
                         else:
                             return 'nop'
                     elif player.fighter.orientation == SOUTH:
-                        if not player_move_or_attack(0, 1,False):
+                        if not player_move_or_attack(0, 1,False,True):
                             swing_sword(player.x,player.y+1)
                             return 'attack'
                         else:
@@ -3156,6 +3271,8 @@ def end_screen(player):
         title = 'el mariachi'
     elif body is not None and body.owner.name == 'hawaiian shirt' and head is not None and head.owner.name == 'flower hat':
         title = 'hawai\'i maoli'
+    elif body is not None and body.owner.name == 'still suit' and (rhand is not None and rhand.owner.name == 'crys knife' or lhand is not None and lhand.owner.name == 'crys knife'):
+        title = 'fremen'
     elif body is not None and body.owner.name == 'hawaiian shirt' and (rhand is not None and rhand.owner.name == 'pocket knife' or lhand is not None and lhand.owner.name == 'pocket knife'):
         title = 'macgyver'
         equip = 'a paper clip'
@@ -3537,6 +3654,10 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
     save_game()
 
     initialize_fov()
+    if dungeon_level == 0:
+        TORCH_RADIUS = 35
+    else:
+        TORCH_RADIUS = 12
 
 def initialize_fov():
     global fov_recompute, fov_map,oldxx,oldyy
