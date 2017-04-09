@@ -607,7 +607,7 @@ class ShaiHulud:
 
     def take_turn(self):
         global objects
-        print 'taking turn {}'.format(self.turn)
+        #print 'taking turn {}'.format(self.turn)
         monster = self.owner
         self.turn += 1
         if self.turn == 2:
@@ -866,7 +866,7 @@ class Shopowner:
                     elif opt == 1:
                         msgbox('their queen, the dragon, has been feeding and will soon come out to kill us all. unless someone can get to the deepest caves in {} and kill her.'.format(lair_name))
                     else:
-                        shpowner.fighter.talk('go avenge you family')
+                        shpowner.fighter.talk('remeber : {}!'.format(lair_name), libtcod.red)
                         opt = -1
             else:
                shpowner.fighter.talk('go avenge you family')
@@ -984,7 +984,7 @@ class Fighter:
         if self.state == 'friendly':
             self.state = 'watchfull'
         elif self.state not in ['friendly','aggressive']:
-            print 'i am [{}]'.format(self.owner.name)
+            #print 'i am [{}]'.format(self.owner.name)
             if len(self.owner.name.split()) <= 1:
                 return
             for m in objects:
@@ -1040,7 +1040,7 @@ class Item:
         #check if there are available slots:
         slt = get_available_slots()
         opts = 0
-        print slt
+        #print slt
         pick_up = False
         switch = 'none'
 
@@ -1134,10 +1134,10 @@ class Item:
         if self.owner.name.split()[1] in ['bag','backpack']:
             for obj in inventory:
                 if obj.equipment:
-                    print 'droppping stuff! [' + obj.equipment.slot +"]"
+                    #print 'droppping stuff! [' + obj.equipment.slot +"]"
                     if obj.equipment.slot in ['bag 0','bag 1','bag 2','backpack']:
                         obj.item.drop()
-                        print 'dropped {}'.format(obj.name)
+                        #print 'dropped {}'.format(obj.name)
 
 
 
@@ -1509,12 +1509,9 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
         r_min = 5
         _stairs_ = False        
         terrain = CHAR_FOREST
-        print "sage?"
         if nm in ['forest']:
-            print "wise"
             sage_type = 'wise man'
         else:
-            print 'old'
             sage_type = 'old man'
         if nm == 'woods':
             margin = 25
@@ -2477,8 +2474,8 @@ def get_square(width,height,i_x,i_y,is_dungeon=False):
 
     str = '({},{})->({},{})'.format(i_x,i_y,i_x+width,i_y+height)
 #            0 1 2 3 4 5 6 7 8 9 0 1 2 3     
-#              @ < > ; , ` . # T ~ '
-    count = [0,0,0,0,0,0,0,0,0,0,0,0]
+#              @ < > ; , ` . # T ~ ' _
+    count = [0,0,0,0,0,0,0,0,0,0,0,0,0]
     
     for y in range(i_y,i_y+height):
         for x in range(i_x,i_x+width):
@@ -2505,6 +2502,8 @@ def get_square(width,height,i_x,i_y,is_dungeon=False):
                 count[10]+=1
             elif tile.terrain == CHAR_SAND:
                 count[11]+=1
+            elif tile.terrain == '_':
+            	return 12
     i = 0
     _max = 0
 
@@ -2529,9 +2528,9 @@ def get_terrains(width,height):
         is_dungeon = False
     mmap = []
     #        0 1 2 3 4 5 6 7 8 9 0 1 2 3     
-    #          @ < > ; , ` . # T ~ S
+    #          @ < > ; , ` . # T ~ S _
 
-    _ter_ = [' ','@','>','<',CHAR_TALL_GRASS,CHAR_LONG_GRASS,CHAR_GRASS,CHAR_DIRT,CHAR_MOUNTAIN,CHAR_FOREST,CHAR_LAKE,CHAR_SAND]
+    _ter_ = [' ','@','>','<',CHAR_TALL_GRASS,CHAR_LONG_GRASS,CHAR_GRASS,CHAR_DIRT,CHAR_MOUNTAIN,CHAR_FOREST,CHAR_LAKE,CHAR_SAND,'_']
     mmap_x = 0
     mmap_y = 0
 
@@ -2559,6 +2558,8 @@ def get_color(t):
             color = libtcod.dark_green
         elif t == '@':
             color = libtcod.white
+        elif t in ['_']:
+        	color = libtcod.white
         else:
             color = libtcod.green
         return color
@@ -2809,8 +2810,23 @@ def player_move_or_attack(dx, dy, move=True,force=False):
                 target = object
                 break
             elif object.fighter.state in ['friendly','wandering']:
-                st = random.choice(['yes?','watch it!','i like you too?','uuh, touch me','keep rubbing'])
-                object.fighter.talk(st)
+            	if random.randint(1,3) == 2:
+            		if object.name in ['wolf','worm','walrus']:
+                		st = random.choice(['!!','!?','...','???'])
+                		object.fighter.talk(st)            			
+            		else:
+                		st = random.choice(['yes?','watch it!','hey!','what?'])
+                		object.fighter.talk(st)
+                else:
+                	nx = player.x
+                	ny = player.y
+                	player.x = object.x
+                	player.y = object.y
+                	object.x = nx
+                	object.y = ny
+            		if object.name not in ['wolf','worm','walrus']:
+                		st = random.choice(['\'xcuse me','ups','pardon','after you'])
+                		object.fighter.talk(st)
 
     #attack if target found, move otherwise
     if target is not None:
@@ -3486,7 +3502,8 @@ def closest_monster(max_range):
 
 def save_floor(floorname='world'):
 
-    print "saving [{}]".format(floorname)    
+    
+    #print "saving [{}]".format(floorname)    
 
     file = shelve.open('./levels/'+floorname, 'n')
     file['map'] = map
@@ -3506,7 +3523,7 @@ def load_floor(floorname='world'):
             new_obj = ob
             break
 
-    print "loading [{}]".format(floorname)
+    #print "loading [{}]".format(floorname)
     file = shelve.open('./levels/'+floorname)
     #file = shelve.open('/levels/'+floorname, 'r')
 
@@ -3606,7 +3623,7 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
     #advance to the next level
     dungeon_name = name
     objects.remove(player)
-    print "going places! dl[{}] in [{}]".format(dungeon_level,name)
+    #print "going places! dl[{}] in [{}]".format(dungeon_level,name)
     if not up:
         if dl == 0:
             save_floor('world.dng')
@@ -3640,7 +3657,7 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
             dungeon_level = 0
             message('oh, wow, you won')
     else:
-        print "going up! dl[{}]".format(dungeon_level)
+        #print "going up! dl[{}]".format(dungeon_level)
 
         if dl == 1:
             save_floor('{}_{}F.dng'.format(name,1))
