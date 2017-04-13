@@ -1993,8 +1993,11 @@ def place_objects(room):
             monster_chances['desert worm'] = 95
         else:
             monster_chances['anangu hunter'] = 95
-    if dungeon_name not in lair_name and dungeon_level > 2:
+    if dungeon_name not in lair_name and dungeon_level > 1:
         monster_chances['kobold champion'] = 5
+    if dungeon_level > 0:
+        monster_chances['kobold trooper'] = 5*dungeon_level 
+
  
     #choose random number of monsters
     num_monsters = libtcod.random_get_int(0, 2, 6)
@@ -2166,6 +2169,11 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         fighter_component = Fighter(hp=6, defense=5, power=5, xp=85, death_function=monster_death,state=state)
         ai_component = BasicMonster()
         monster = Object(x, y, 'K', 'kobold champion', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name.split()[1] in ['trooper'] and name.split()[0] in ['kobold']:
+        #create a kobold champion
+        fighter_component = Fighter(hp=5, defense=4, power=4, xp=65, death_function=monster_death,state=state)
+        ai_component = BasicMonster()
+        monster = Object(x, y, 'K', 'kobold trooper', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
     elif name.split()[0] in ['high_level'] and name.split()[0] in ['kobold']:
         #create a high_level_monster
         fighter_component = Fighter(hp=5, defense=4, power=2, xp=85, death_function=monster_death,state=state)
@@ -2805,7 +2813,7 @@ def player_move_or_attack(dx, dy, move=True,force=False):
     #try to find an attackable object there
     target = None
     for object in objects:
-        if object.fighter and object.x == x and object.y == y:
+        if object.fighter and object.x == x and object.y == y and object.name not in ['koboldicider']:
             if object.fighter.state not in ['friendly','wandering'] or force:
                 target = object
                 break
@@ -3365,7 +3373,7 @@ def dragon_death(monster):
 
 def monster_death(monster):
     global objects, kobolds_killed
-    if monster.name.split(' ')[0] in ['kobold'] and monster.name.split(' ')[1] not in ['champion']:
+    if monster.name.split(' ')[0] in ['kobold'] and monster.name.split(' ')[1] not in ['champion','trooper']:
         kobolds_killed+=1
         _drop_ = random.randint(0,30)
         if _drop_ <= 3:
@@ -3382,6 +3390,10 @@ def monster_death(monster):
         addItem('metal armour',monster.x, monster.y)
         addItem('elm',monster.x, monster.y)
         addItem('long sword',monster.x,monster.y)
+    elif monster.name in ['kobold trooper']:
+        addItem('leather armour',monster.x, monster.y)
+        addItem('leather hat',monster.x, monster.y)
+        addItem('short sword',monster.x,monster.y)   
     elif monster.name in ['anangu hunter']:
         if random.randint(1,3) == 3:
             addItem('wooden boomerang',monster.x, monster.y)
@@ -3656,6 +3668,7 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
             initialize_fov()
             dungeon_level = 0
             message('oh, wow, you won')
+
     else:
         #print "going up! dl[{}]".format(dungeon_level)
 
