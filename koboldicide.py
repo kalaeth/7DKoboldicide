@@ -671,7 +671,7 @@ class BasicMonster:
                 
                 #move towards player if far away
                 ai+=", _dist[{}]".format(_dist)
-                if _dist > 10:
+                if _dist > 15:
                     ai+=", ?"
                     notifications.append(Notif('?',4,monster.x,monster.y-1))
                     self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
@@ -687,7 +687,7 @@ class BasicMonster:
                     notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
                     monster.fighter.attack(player)
         elif state in ['watchfull']:
-            if _dist <= 5:
+            if _dist <= 10:
                 notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
                 monster.move_towards(player.x, player.y)
                 monster.fighter.state = 'aggressive'
@@ -696,7 +696,7 @@ class BasicMonster:
                 monster.fighter.talk('watch it..',color=libtcod.dark_yellow)
                 monster.fighter.state = 'aggressive'
         elif state in ['friendly']:
-            _dist = int(monster.distance_to(player))
+            #_dist = int(monster.distance_to(player))
             if _dist <= 1:
                 monster.fighter.talk('hey friend!',color=libtcod.green)
         else:
@@ -862,9 +862,9 @@ class Shopowner:
                 while opt >= 0:
                     opt = arrow_menu('hello young man. i can tell you about :',['the kobolds','their goal','or you can leave me alone'],30)
                     if opt == 0:
-                        msgbox('they stink, they are evil and they hurt you. but they are stupid. and each one is very weak.')
+                        msgbox('they stink, they are evil and they hurt you. but they are stupid. and each one is very weak.',2)
                     elif opt == 1:
-                        msgbox('their queen, the dragon, has been feeding and will soon come out to kill us all. unless someone can get to the deepest caves in {} and kill her.'.format(lair_name))
+                        msgbox('their queen, the dragon, has been feeding and will soon come out to kill us all. unless someone can get to the deepest caves in {} and kill her.'.format(lair_name),-2)
                     else:
                         shpowner.fighter.talk('remeber : {}!'.format(lair_name), libtcod.red)
                         opt = -1
@@ -1230,7 +1230,13 @@ def get_equipped_by_name(name):  #returns the equipment in a slot, or None if it
     return None
 
 
-  
+def get_equipped_name_in_slot(slot):  #returns the name of equip in a slot, or 'nothing' if it's empty  
+    x = get_equipped_in_slot(slot)
+    if x is None:
+        return 'nothing'
+    else:
+        return x.owner.name
+
 def get_equipped_in_slot(slot):  #returns the equipment in a slot, or None if it's empty
     for obj in inventory:
         if obj.equipment and obj.equipment.slot == slot and obj.equipment.is_equipped:
@@ -2847,7 +2853,7 @@ def player_move_or_attack(dx, dy, move=True,force=False):
 
     return False
   
-def menu(header, options, width,offset=0):
+def menu(header, options, width,offset=0,y_offset=0):
     #calculate total height for the header (after auto-wrap) and one line per option
     header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
     if header == '':
@@ -2875,7 +2881,7 @@ def menu(header, options, width,offset=0):
  
     #blit the contents of "window" to the root console
     x = SCREEN_WIDTH/2 - width/2 + offset
-    y = SCREEN_HEIGHT/2 - height/2
+    y = SCREEN_HEIGHT/2 - height/2 + y_offset
     libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 1.0)
  
     #present the root console to the player and wait for a key-press
@@ -2910,8 +2916,8 @@ def inventory_menu(header):
     if index is -1 or len(inventory) == 0: return None
     return inventory[index].item
  
-def msgbox(text, width=40):
-    menu(text, [], width,offset=-3)  #use menu() as a sort of "message box"
+def msgbox(text, yoff=0,width=40):
+    menu(text, [], width,offset=-3,y_offset=0)  #use menu() as a sort of "message box"
  
 def handle_keys():
     global key,isRealTime, mouse, oldxx,oldyy,oldPxx,oldPyy,notifications, inventory
@@ -3104,14 +3110,14 @@ def handle_keys():
                     if not fit is None:
                         notifications.append(Notif('*',5,_x,_y))
                         if curr_weap.owner.name.split(' ')[1] in ['spear','stick','rock']:
-                            message('you threw your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
+                            message('you threw your {} at {}'.format(curr_weap.owner.name,f.name))
                             i_name = curr_weap.owner.name
                             for it in inventory:
                                 if it.name == i_name:
                                     it.item.drop(endx,endy)
                                     break;
                         else:
-                            message('you shot your {} at {} and dealt {}'.format(curr_weap.owner.name,f.name,dmg))
+                            message('you shot your {} at {}'.format(curr_weap.owner.name,f.name))
                         fit.fighter.take_damage(dmg)
                     else:
                         message('you threw your {} at nothing'.format(curr_weap.owner.name))
@@ -3125,7 +3131,7 @@ def handle_keys():
             if key_char in ['f','F'] or key.vk == libtcod.KEY_KP9:
                 curr_weap = get_equipped_in_slot('right hand')
                 weap_2 = get_equipped_in_slot('left hand')
-                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] == 'bag':
+                if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['bag','shirt','t-shirt']:
                     orien = player.fighter.orientation
                     strangle = False
                     for obj in objects:
@@ -3139,16 +3145,16 @@ def handle_keys():
                         return 'nop'
                     if orien == EAST:
                         if player_move_or_attack(1, 0,False,True):
-                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                            message('you strangle {} with your {}'.format(f.name,curr_weap.owner.name,dmg))
                     elif orien == WEST:
                         if player_move_or_attack(-1, 0,False,True):
-                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                            message('you strangle {} with your {}'.format(f.name,curr_weap.owner.name,dmg))
                     elif orien == NORTH:
                         if player_move_or_attack(0, -1,False,True):
-                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                            message('you strangle {} with your {}'.format(f.name,curr_weap.owner.name,dmg))
                     elif orien == SOUTH:
                         if player_move_or_attack(0, 1,False,True):
-                            message('you strangle {} with your {} and dealt {}'.format(f.name,curr_weap.owner.name,dmg))
+                            message('you strangle {} with your {}'.format(f.name,curr_weap.owner.name,dmg))
                 swingable = ['sword','axe','stick']
                 pokable = ['spear','whip']
                 if curr_weap is None and weap_2 is not None or (curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in swingable and weap_2 is not None): 
@@ -3267,7 +3273,14 @@ def in_game_menu():
                 chosen_item.drop()
                 continue
         elif opt == 2:
-            msgbox('the koboldicider\n\nMaximum HP: ' + str(player.fighter.max_hp) + '\nAttack: ' + str(player.fighter.power) + '\nDefense: ' + str(player.fighter.defense), CHARACTER_SCREEN_WIDTH)
+            str = 'the koboldicider is currently feeling '
+            str += '{}.\n'.format(HEALTH[player.fighter.hp])
+            
+            str += 'his {} and {} give him {} power '.format(get_equipped_name_in_slot('left hand'),get_equipped_name_in_slot('right hand'),player.fighter.power)
+            str += 'and his {} and {} give him {} defense.\n\n'.format(get_equipped_name_in_slot('body'),get_equipped_name_in_slot('head'),player.fighter.defense)
+            str += 'he has killed {} kobolds, so far.'.format(kobolds_killed)
+            msgbox(str)
+
         elif opt == 3:
             return 'nop'
         elif opt == 4:
@@ -3317,6 +3330,9 @@ def end_screen(player):
     elif rhand is None and lhand is None:
         equip = 'only your fists'
 
+    if title == '':
+    	title = 'nobody'
+
 
     death_msg = 'good bye, {}, the koboldicider. you killed [{}] kobolds, '.format(title,kobolds_killed)
     if equip == 'nothing':
@@ -3347,7 +3363,7 @@ def player_death(player):
     global game_state
     message('You died!', libtcod.red)
     end_screen(player)
-    msgbox(' game over ')
+    message(' game over ')
     game_state = 'dead'
     #for added effect, transform the player into a corpse!
     player.char = '%'
@@ -3364,9 +3380,9 @@ def dragon_death(monster):
 
     render_all()
     msgbox("congratulations!")
-    msgbox("you won!!")
-    msgbox("you have become kobolicider, destroyer of kobolds.")
-    msgbox(' you killed [{}] kobolds!'.format(kobolds_killed))
+    msgbox("you won!!",1)
+    msgbox("you have become kobolicider, destroyer of kobolds.",2)
+    msgbox(' you killed [{}] kobolds!'.format(kobolds_killed),3)
 
     return 'exit'
 
@@ -3386,6 +3402,10 @@ def monster_death(monster):
             addItem('hat', monster.x,monster.y)
         elif _drop_ <= 20:
             objects.append(Object(monster.x, monster.y, '$', 'money', libtcod.yellow, always_visible=True))
+        else:
+            addItem('shirt',monster.x,monster.y)
+    elif monster.name.split()[0] in ['farmer','lumberjack','leathersmith','blacksmith','nurse']:
+        addItem('shirt',monster.x, monster.y)
     elif monster.name in ['kobold champion']:
         addItem('metal armour',monster.x, monster.y)
         addItem('elm',monster.x, monster.y)
@@ -3438,9 +3458,10 @@ def wolf_death(monster):
     monster.ai = DeadBody(monster)
     for obj in objects:
         if obj.name == monster.name:
-            obj.move_towards(player.x, player.y)
-            if obj.fighter:
-                obj.fighter.set_state('aggressive')
+            if random.randint(0,6) >= 5:
+                obj.move_towards(player.x, player.y)
+                if obj.fighter:
+                    obj.fighter.set_state('aggressive')
 
     message('the {} howls, beckonign his friends, while he dies'.format(monster.name))
     monster.name = 'dead ' + monster.name
@@ -3703,7 +3724,7 @@ def initialize_fov():
     libtcod.console_clear(con)  #unexplored areas start black (which is the default background color)
  
 def play_game():
-    global key, mouse,isRealTime,game_animations,notifications, camera_x, camera_y, dialogs
+    global key, mouse,isRealTime,game_animations,notifications, camera_x, camera_y, dialogs,kobolds_killed
 
     dot = Object(0,1,'.','dot', libtcod.white, blocks=False)
     objects.append(dot)
@@ -3827,7 +3848,10 @@ def main_menu():
         #show options and wait for the player's choice
         #_continue = arrow_menu('continue ?',['   yes','    no'],12,0,12,12)
         #choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 25,10)
-        libtcod.console_print_ex(0, 60, 10, libtcod.BKGND_NONE, libtcod.RIGHT, 'Koboldicider <--------')          
+        libtcod.console_set_default_foreground(0, libtcod.black)
+        libtcod.console_print_ex(0, 4, 1, libtcod.BKGND_NONE, libtcod.LEFT, 'koboldicide')          
+        libtcod.console_print_ex(0, 4, 2, libtcod.BKGND_NONE, libtcod.LEFT, '     v 0.02')          
+        libtcod.console_set_default_foreground(0, libtcod.white)
         choice = arrow_menu('welcome, koboldicider',['into the game!', 'please help?', 'i wanna quit.'],40,0,20,15)
 
  
