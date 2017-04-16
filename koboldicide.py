@@ -703,6 +703,55 @@ class BasicMonster:
             self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
         #print ai
 
+class HunterMonster:
+    #AI for a basic monster.
+    def take_turn(self):
+        #a basic monster takes its turn. if you can see it, it can see you
+        monster = self.owner
+        state = monster.fighter.state
+        _dist = int(monster.distance_to(player))
+        if state in ['aggressive']:
+            ai = "{}@[{},{}]?".format(monster.name, monster.x, monster.y)
+
+            #if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+            if _dist < 20:
+                ai+=", I see you!"
+                notifications.append(Notif('*',4,monster.x,monster.y-1))
+                
+                #move towards player if far away
+                ai+=", _dist[{}]".format(_dist)
+                if _dist > 15:
+                    ai+=", ?"
+                    notifications.append(Notif('?',4,monster.x,monster.y-1))
+                    self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+                    if player.x != monster.x and player.y != monster.y:
+                        monster.fighter.state = 'watchfull'
+                elif _dist > 1:
+                    ai+=", !"
+                    notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                    monster.move_towards(player.x, player.y)
+                #close enough, attack! (if the player is still alive.)
+                else:
+                    ai+=", X"
+                    notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
+                    monster.fighter.attack(player)
+        elif state in ['watchfull']:
+            if _dist <= 10:
+                notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                monster.move_towards(player.x, player.y)
+                monster.fighter.state = 'aggressive'
+        elif state in ['neutral']:
+            if _dist <= 1:
+                monster.fighter.talk('watch it..',color=libtcod.dark_yellow)
+                monster.fighter.state = 'aggressive'
+        elif state in ['friendly']:
+            #_dist = int(monster.distance_to(player))
+            if _dist <= 1:
+                monster.fighter.talk('hey friend!',color=libtcod.green)
+        else:
+            self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+        #print ai
+
 class Squad:
     def __init__(self, leader):
         self.leader = leader
@@ -2195,7 +2244,7 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         monster = Object(x, y, '~', 'desert worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
     elif name == 'anangu hunter':
         fighter_component = Fighter(hp=5, defense=1, power=6, xp=35, death_function=monster_death,state=random.choice(['wandering','friendly']))
-        ai_component = BasicMonster()
+        ai_component = HunterMonster()
         monster = Object(x, y, '@', 'anangu hunter', libtcod.white,blocks=True, fighter=fighter_component, ai=ai_component)
     else:
         fighter_component = Fighter(hp=1, defense=0, power=1, xp=3, death_function=monster_death_no_loot,state='wandering')
