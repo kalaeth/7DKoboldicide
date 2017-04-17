@@ -3747,6 +3747,10 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
             load_floor('world.dng')
             initialize_fov()
             dungeon_level = 0
+            if kobolds_killed > 20:
+               addMonster('kobold trooper',0,0)
+               addMonster('kobold trooper',1,0)
+               addMonster('kobold trooper',0,1)
         else:
             dungeon_level -= 1
             load_floor('{}_{}F.dng'.format(name,dungeon_level))
