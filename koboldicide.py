@@ -1042,7 +1042,7 @@ class Fighter:
                     continue
                 if m.name.split()[0] == self.owner.name.split()[0] or m.name.split()[1] == self.owner.name.split()[1]:
                     _dist = int(self.owner.distance_to(m))
-                    if _dist < TORCH_RADIUS and m.fighter:
+                    if _dist < 10 and m.fighter:
                         m.fighter.set_state('aggressive') 
             self.state = 'aggressive'
  
@@ -1167,6 +1167,8 @@ class Item:
                 self.owner.equipment.slot = switch
                 self.use()
             elif switch != 'none':
+                c_equip = get_equipped_in_slot(switch)
+                c_equip.owner.item.drop()
                 self.use()
         else:
             message('you drop a {} on the floor'.format(self.owner.name))
@@ -1507,7 +1509,6 @@ def make_world_map(grassness=20,start=False):
         objects.append(stairs)
         n = random.choice(name_list)
         name_list.remove(n)
-        possible_lairs.append(n)
         dung_list.append(Dungeon('{} desert'.format(n),stairs.x, stairs.y))
 
     
@@ -1596,16 +1597,17 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
         max_rooms_here = 8
         _stairs_ = False
 
-    if name != lair_name and dungeon_level > 2:
-        _stairs_ = False
-        margin = 20
-
     if name.split()[0] == 'mount':
         margin = 15
         r_min -= 3
         r_max -= 3
 
-
+    if name != lair_name and dungeon_level > 2:
+        _stairs_ = False
+        margin = 20
+    if name == lair_name and dungeon_level > 2:
+        _stairs_ = True
+        margin = 15
 
     #fill map with "blocked" tiles
     map = [[ Tile(True,terrain=terrain)
@@ -2243,7 +2245,7 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         ai_component = BasicMonster()
         monster = Object(x, y, '~', 'desert worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
     elif name == 'anangu hunter':
-        fighter_component = Fighter(hp=5, defense=1, power=6, xp=35, death_function=monster_death,state=random.choice(['wandering','friendly']))
+        fighter_component = Fighter(hp=5, defense=1, power=6, xp=35, death_function=monster_death,state='wandering')
         ai_component = HunterMonster()
         monster = Object(x, y, '@', 'anangu hunter', libtcod.white,blocks=True, fighter=fighter_component, ai=ai_component)
     else:
@@ -2572,7 +2574,7 @@ def get_square(width,height,i_x,i_y,is_dungeon=False):
 
 
     while i < len(count):
-        if count[i] > _max and i >= 5:
+        if count[i] > _max and i >= 6:
             _max = count[i]
         else:
             i+=1
@@ -3093,7 +3095,6 @@ def handle_keys():
                         if _boomerang_:
                             for _y in range(endy,player.y):
                                 notifications.append(Notif(')',3,_x,player.y))
-
                     elif player.fighter.orientation == EAST:
                         for _x in range(player.x+1, MAP_WIDTH):
                             if map[_x][player.y].blocked or _break:
@@ -3168,6 +3169,8 @@ def handle_keys():
                         else:
                             message('you shot your {} at {}'.format(curr_weap.owner.name,f.name))
                         fit.fighter.take_damage(dmg)
+                        return 'attack'
+
                     else:
                         message('you threw your {} at nothing'.format(curr_weap.owner.name))
                         if curr_weap.owner.name.split(' ')[1] in ['spear','stick','rock']:
@@ -3176,6 +3179,7 @@ def handle_keys():
                                 if it.name == i_name:
                                     it.item.drop(endx,endy)
                                     break;
+                        return 'nop'
 
             if key_char in ['f','F'] or key.vk == libtcod.KEY_KP9:
                 curr_weap = get_equipped_in_slot('right hand')
@@ -3747,10 +3751,10 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
             load_floor('world.dng')
             initialize_fov()
             dungeon_level = 0
-            if kobolds_killed > 20:
-               addMonster('kobold trooper',0,0)
-               addMonster('kobold trooper',1,0)
-               addMonster('kobold trooper',0,1)
+            if kobolds_killed > 10:
+                addMonster('kobold trooper',0,0)
+                addMonster('kobold trooper',1,0)
+                addMonster('kobold trooper',0,1)
         else:
             dungeon_level -= 1
             load_floor('{}_{}F.dng'.format(name,dungeon_level))
