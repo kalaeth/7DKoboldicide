@@ -2146,12 +2146,17 @@ def addItem(name,x=-1,y=-1,player=True):
             equipment_component = Equipment(slot='back', capacity=4)
             item = Object(x, y, '#', 'ugly backpack', libtcod.white, equipment=equipment_component)
     elif name == 'hat':
-        nm = random.choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party ','bandanna '])
-        if nm in ['flower ','party ','bandanna ']:
+        nm = random.choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party ','bandanna ','wig'])
+        if nm in ['wig']:
             equipment_component = Equipment(slot='head',defense_bonus=0)
+            cl = random.choice(['black ','blond ','brunnet '])
+            item = Object(x, y, '^', '{}{}'.format(cl,nm), libtcod.white, equipment=equipment_component)
         else:
-            equipment_component = Equipment(slot='head',defense_bonus=1)
-        item = Object(x, y, '^', '{}hat'.format(nm), libtcod.white, equipment=equipment_component)
+            if nm in ['flower ','party ','bandanna ']:
+                equipment_component = Equipment(slot='head',defense_bonus=0)
+            else:
+                equipment_component = Equipment(slot='head',defense_bonus=1)
+            item = Object(x, y, '^', '{}hat'.format(nm), libtcod.white, equipment=equipment_component)
     elif name == 'elm':
         equipment_component = Equipment(slot='head',defense_bonus=2)
         item = Object(x, y, '^', 'metal elm', libtcod.white, equipment=equipment_component)
@@ -3356,6 +3361,8 @@ def end_screen(player):
         title = 'nudist'
     elif body is not None and body.owner.name == 'colorful poncho' and head is not None and head.owner.name == 'sombrero hat':
         title = 'el mariachi'
+    elif body is not None and body.owner.name in ['ulver t-shirt','manowar t-shirt'] and head is not None and head.owner.name in ['black wig','blonde wig','brunette wig']:
+        title = 'metal head'
     elif body is not None and body.owner.name == 'hawaiian shirt' and head is not None and head.owner.name == 'flower hat':
         title = 'hawai\'i maoli'
     elif body is not None and body.owner.name == 'still suit' and (rhand is not None and rhand.owner.name == 'crys knife' or lhand is not None and lhand.owner.name == 'crys knife'):
@@ -3448,9 +3455,9 @@ def monster_death(monster):
             addItem('short sword',monster.x,monster.y)
         elif _drop_ <= 7:
             addItem('leather armour',monster.x,monster.y)
-        elif _drop_ <= 10:
+        elif _drop_ <= 18:
             addItem('hat', monster.x,monster.y)
-        elif _drop_ <= 20:
+        elif _drop_ >= 20:
             objects.append(Object(monster.x, monster.y, '$', 'money', libtcod.yellow, always_visible=True))
         else:
             addItem('shirt',monster.x,monster.y)
@@ -3665,7 +3672,7 @@ def new_game():
     fighter_component = PlayerFighter(hp=5, defense=5, power=2, xp=0, death_function=player_death)
     player = Object(0, 0, '@', 'koboldicider', libtcod.white, blocks=True, fighter=fighter_component)
     clothing = addItem('shirt',-1,-1,False)
-    
+    clothing2 = addItem('hat',-1,-1,False)
     player.level = 1
     isRealTime = False
  
@@ -3694,8 +3701,10 @@ def new_game():
 
     notifications.append(Notif('nham, tasty dog!',5,player.x+1,player.y+4))
     clothing.item.use()
+    clothing2.item.use()
 
-    message('As you return from you errands, you find your house burning and a kobold eating your dog')
+
+    #message('As you return from you errands, you find your house burning and a kobold eating your dog')
     message('the wise man in the forest will know what to do.')
     message('but first..')
  
