@@ -95,6 +95,7 @@ CHAR_MOUNTAIN = '#'
 CHAR_STAIRS = '<'
 CHAR_DOOR = ']'
 CHAR_SAND = 'S'
+CHAR_STONE = '='
 
 class Dungeon:
     def __init__(self,name,x,y):
@@ -166,7 +167,7 @@ class Tile:
         #by default, if a tile is blocked, it also blocks sight
 
         self.terrain = terrain
-        if self.terrain in [CHAR_LAKE,CHAR_FOREST,CHAR_MOUNTAIN,CHAR_ICE]:
+        if self.terrain in [CHAR_LAKE,CHAR_FOREST,CHAR_MOUNTAIN,CHAR_ICE,CHAR_STONE]:
             self.blocked = True
             if self.terrain in [CHAR_FOREST, CHAR_MOUNTAIN]:
                 self.block_sight = True
@@ -196,6 +197,8 @@ class Tile:
             self.color = libtcod.darker_green
         elif self.terrain in [CHAR_LONG_GRASS,CHAR_FOREST]:
             self.color = libtcod.dark_green
+        elif self.terrain in[CHAR_STONE]:
+            self.color = libtcod.light_grey
         elif self.terrain == CHAR_GRASS:
             self.color = libtcod.green
         elif self.terrain in ['-','_','|','[',']']:
@@ -1578,12 +1581,12 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
         m_wid = 100
         m_hei = 100
         margin = 25
-        r_max = 20
+        r_max = 15
         r_min = 10
-        max_rooms_here = 6
+        max_rooms_here = 16
         _stairs_ = False        
         terrain = CHAR_LAKE
-        inabitants = ['lumberjack','leathersmith','nurse','farmer','blacksmith','nurse']
+        inabitants = ['lumberjack','leathersmith','nurse','farmer','blacksmith','nurse','king']
     elif terrain == CHAR_SAND:
         margin = 5
         r_max = 45
@@ -1985,13 +1988,23 @@ def place_homes(room, inabitants):
     #y = libtcod.random_get_int(0, room.y1+5, room.y2-5)
     npc = random.choice(inabitants)
     inabitants.remove(npc)
-    
-    if npc not in ['old man','wise man']:
+    if npc in ['king']:
+        map[x-4][y-4] = Tile(True,terrain=CHAR_STONE)
+        map[x-2][y-2] = Tile(True,terrain=CHAR_STONE)
+        map[x-1][y-2] = Tile(True,terrain=CHAR_STONE)
+        map[x-3][y-2] = Tile(True,terrain=CHAR_STONE)
+        map[x-3][y-3] = Tile(True,terrain=CHAR_STONE)
+        map[x-2][y-3] = Tile(True,terrain='.')
+        map[x-1][y-3] = Tile(True,terrain=']')
+        map[x-1][y-4] = Tile(True,terrain=CHAR_STONE)
+        map[x-2][y-4] = Tile(True,terrain=CHAR_STONE)
+        map[x-3][y-4] = Tile(True,terrain=CHAR_STONE)
+    elif npc not in ['old man','wise man']:
         map[x-2][y-2] = Tile(True,terrain='-')
         map[x-1][y-2] = Tile(True,terrain='-')
         map[x-3][y-2] = Tile(True,terrain='-')
         map[x-3][y-3] = Tile(True,terrain='|')
-        map[x-2][y-3] = Tile(True,terrain='_')
+        map[x-2][y-3] = Tile(True,terrain='.')
         map[x-1][y-3] = Tile(True,terrain=']')
         map[x-1][y-4] = Tile(True,terrain='-')
         map[x-2][y-4] = Tile(True,terrain='-')
@@ -2007,9 +2020,14 @@ def place_homes(room, inabitants):
         map[x-2][y-4] = Tile(True,terrain='_')
         map[x-3][y-4] = Tile(True,terrain='_')
 
-    addMonster(npc, x-1, y-3)
-    if random.randint(1,30) > 15:
-        objects.append(Object(x-2, y-3, '$', 'money', libtcod.yellow, always_visible=True))
+    if npc not in ['king']:
+        addMonster(npc, x-1, y-3)
+        if random.randint(1,30) > 15:
+            objects.append(Object(x-2, y-3, '$', 'money', libtcod.yellow, always_visible=True))
+    else:
+        if random.randint(1,30) > 5:
+            objects.append(Object(x-2, y-3, '$', 'money', libtcod.yellow, always_visible=True))
+
 
     return inabitants
 
@@ -3021,6 +3039,7 @@ def handle_keys():
                             break
                         elif object.name == 'money':
                             player.fighter.purse += 1 
+                            message('{} picked up some $$'.format(player.name))
                             objects.remove(object)
                         #elif player.x == stairs.x and player.y == stairs.y:
                         #    next_level(dungeon_level,CHAR_MOUNTAIN,up=False)
@@ -3056,6 +3075,7 @@ def handle_keys():
                             break
                         elif object.name == 'money':
                             player.fighter.purse += 1 
+                            message('{} picked up some $$'.format(player.name))
                             objects.remove(object)
             if key_char in ['c','C'] or key.vk == libtcod.KEY_KP3 or key.vk == libtcod.KEY_ESCAPE:
                 return in_game_menu()
@@ -3558,7 +3578,7 @@ def monster_death_no_loot(monster):
     monster.blocks = False
     monster.fighter = None
     monster.ai = DeadBody(monster)
-    if monsterr.name.split()[0] in ['worm','wolf','walrus']:
+    if monster.name in ['worm','wolf','walrus']:
         animals_killed += 1
 
     monster.name = 'dead ' + monster.name
@@ -3854,6 +3874,7 @@ def play_game():
                 if obj.name in ['money']:
                     objects.remove(obj)
                     player.fighter.purse += 1
+                    message('{} picked up some $$'.format(player.name))
                     break
 
         if map[player.x][player.y].terrain == CHAR_TALL_GRASS:
