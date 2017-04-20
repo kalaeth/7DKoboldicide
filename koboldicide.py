@@ -1157,10 +1157,10 @@ class Item:
             objects.remove(self.owner)
             message('You picked up a ' + self.owner.name + '!', libtcod.green)
             if switch == 'right':
-                c_equip_r.owner.item.drop()
+                c_equip_r.owner.item.drop(_discard=True)
                 self.use()
             elif switch == 'left':
-                c_equip_l.owner.item.drop()
+                c_equip_l.owner.item.drop(_discard=True)
                 self.owner.equipment.slot = 'left hand'
                 self.use()
             elif switch.split()[0] == 'bag':
@@ -1168,14 +1168,14 @@ class Item:
                 self.use()
             elif switch != 'none':
                 c_equip = get_equipped_in_slot(switch)
-                c_equip.owner.item.drop()
+                c_equip.owner.item.drop(_discard=True)
                 self.use()
         else:
             message('you drop a {} on the floor'.format(self.owner.name))
 
 
  
-    def drop(self,x=-1,y=-1):
+    def drop(self,x=-1,y=-1,_discard=False):
         #special case: if the object has the Equipment component, dequip it before dropping
         if self.owner.equipment:
             self.owner.equipment.dequip()
@@ -1189,9 +1189,6 @@ class Item:
                     if obj.equipment.slot in ['bag 0','bag 1','bag 2','backpack']:
                         obj.item.drop()
                         #print 'dropped {}'.format(obj.name)
-
-
-
 
         #add to the map and remove from the player's inventory. also, place it at the player's coordinates
         objects.append(self.owner)
@@ -1284,6 +1281,12 @@ def get_equipped_by_name(name):  #returns the equipment in a slot, or None if it
 def get_equipped_name_in_slot(slot):  #returns the name of equip in a slot, or 'nothing' if it's empty  
     x = get_equipped_in_slot(slot)
     if x is None:
+        if slot in ['left hand','right hand']:
+            return '{} fist'.format(slot.split()[0])
+        if slot in ['head']:
+            return 'empty head' 
+        if slot in ['body']:
+            return 'hairless chest'
         return 'nothing'
     else:
         return x.owner.name
@@ -1458,7 +1461,7 @@ def make_world_map(grassness=20,start=False):
     map = [[Tile(False,terrain=CHAR_LONG_GRASS) for y in range(0,MAP_HEIGHT)] for x in range(0,MAP_WIDTH)]
 
     #place mountain
-    place_thing(CHAR_TALL_GRASS,int(MAP_HEIGHT/3), False,5)
+    place_thing(CHAR_TALL_GRASS,int(MAP_HEIGHT/5), False,6)
 
     place_thing(CHAR_MOUNTAIN,8,True,3);
     objects.append(stairs)
@@ -2149,12 +2152,17 @@ def addItem(name,x=-1,y=-1,player=True):
             equipment_component = Equipment(slot='back', capacity=4)
             item = Object(x, y, '#', 'ugly backpack', libtcod.white, equipment=equipment_component)
     elif name == 'hat':
-        nm = random.choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party ','bandanna '])
-        if nm in ['flower ','party ','bandanna ']:
+        nm = random.choice(['trucker ','cowboy ','sombrero ','clown ','flower ','party ','bandanna ','wig'])
+        if nm in ['wig']:
             equipment_component = Equipment(slot='head',defense_bonus=0)
+            cl = random.choice(['black ','blond ','brunette '])
+            item = Object(x, y, '^', '{}{}'.format(cl,nm), libtcod.white, equipment=equipment_component)
         else:
-            equipment_component = Equipment(slot='head',defense_bonus=1)
-        item = Object(x, y, '^', '{}hat'.format(nm), libtcod.white, equipment=equipment_component)
+            if nm in ['flower ','party ','bandanna ']:
+                equipment_component = Equipment(slot='head',defense_bonus=0)
+            else:
+                equipment_component = Equipment(slot='head',defense_bonus=1)
+            item = Object(x, y, '^', '{}hat'.format(nm), libtcod.white, equipment=equipment_component)
     elif name == 'elm':
         equipment_component = Equipment(slot='head',defense_bonus=2)
         item = Object(x, y, '^', 'metal elm', libtcod.white, equipment=equipment_component)
@@ -3184,6 +3192,11 @@ def handle_keys():
             if key_char in ['f','F'] or key.vk == libtcod.KEY_KP9:
                 curr_weap = get_equipped_in_slot('right hand')
                 weap_2 = get_equipped_in_slot('left hand')
+                if curr_weap is not None and curr_weap.owner.name in ['work axe'] or weap_2 is not None and weap_2.owner.name in ['work axe']:
+                    _x_,_y_ = player.fighter.xgetTargetTile()
+                    if map[_x_][_y_].terrain == CHAR_FOREST and dungeon_level > 0:
+                        map[_x_][_y_] = Tile(False,terrain=CHAR_GRASS)
+
                 if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['bag','shirt','t-shirt']:
                     orien = player.fighter.orientation
                     strangle = False
@@ -3331,7 +3344,7 @@ def in_game_menu():
             
             str += 'his {} and {} give him {} power '.format(get_equipped_name_in_slot('left hand'),get_equipped_name_in_slot('right hand'),player.fighter.power)
             str += 'and his {} and {} give him {} defense.\n\n'.format(get_equipped_name_in_slot('body'),get_equipped_name_in_slot('head'),player.fighter.defense)
-            str += 'he has killed {} kobolds, so far.'.format(kobolds_killed)
+            str += 'he has killed {} kobolds and {} poor wild animals, so far.'.format(kobolds_killed, animals_killed)
             msgbox(str)
 
         elif opt == 3:
@@ -3359,6 +3372,8 @@ def end_screen(player):
         title = 'nudist'
     elif body is not None and body.owner.name == 'colorful poncho' and head is not None and head.owner.name == 'sombrero hat':
         title = 'el mariachi'
+    elif body is not None and body.owner.name in ['ulver t-shirt','manowar t-shirt'] and head is not None and head.owner.name in ['black wig','blond wig','brunette wig']:
+        title = 'metal head'
     elif body is not None and body.owner.name == 'hawaiian shirt' and head is not None and head.owner.name == 'flower hat':
         title = 'hawai\'i maoli'
     elif body is not None and body.owner.name == 'still suit' and (rhand is not None and rhand.owner.name == 'crys knife' or lhand is not None and lhand.owner.name == 'crys knife'):
@@ -3374,6 +3389,12 @@ def end_screen(player):
         title = 'rambo'
         equip = 'bad-assery'
 
+    if animals_killed >5:
+        if title != '':
+            title = 'animal killer, '+title
+        else:
+            title = 'animal killer'
+
     if (rhand is not None and rhand.owner.name.split()[1] == 'rock' and lhand is not None and lhand.owner.name.split()[1] == 'stick') or (rhand is not None and rhand.owner.name.split()[1] =='stick' and lhand is not None and lhand.owner.name.split()[1] == 'rock'):
         equip = 'sticks & stones'
         if title != '':
@@ -3387,7 +3408,7 @@ def end_screen(player):
     	title = 'nobody'
 
 
-    death_msg = 'good bye, {}, the koboldicider. you killed [{}] kobolds, '.format(title,kobolds_killed)
+    death_msg = 'good bye, {}, the koboldicider. you killed [{}] kobolds, [{}] poor wild animals, '.format(title,kobolds_killed,animals_killed)
     if equip == 'nothing':
         equip = ''
         if rhand is not None:
@@ -3451,9 +3472,9 @@ def monster_death(monster):
             addItem('short sword',monster.x,monster.y)
         elif _drop_ <= 7:
             addItem('leather armour',monster.x,monster.y)
-        elif _drop_ <= 10:
+        elif _drop_ <= 18:
             addItem('hat', monster.x,monster.y)
-        elif _drop_ <= 20:
+        elif _drop_ >= 20:
             objects.append(Object(monster.x, monster.y, '$', 'money', libtcod.yellow, always_visible=True))
         else:
             addItem('shirt',monster.x,monster.y)
@@ -3499,10 +3520,10 @@ def monster_death(monster):
     monster.ai = DeadBody(monster)
 
     monster.name = 'dead ' + monster.name.split()[0]
-    #add new object of the tipe "ammo"
     monster.send_to_back()
 
 def wolf_death(monster):
+    global animals_killed
     #teh wofl howls! 
     monster.char = '%'
     monster.color = libtcod.dark_red
@@ -3518,10 +3539,11 @@ def wolf_death(monster):
 
     message('the {} howls, beckonign his friends, while he dies'.format(monster.name))
     monster.name = 'dead ' + monster.name
-    #add new object of the tipe "ammo"
     monster.send_to_back()
+    animals_killed += 1
 
 def monster_death_no_loot(monster):
+    global animals_killed
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
     if monster.name == 'desert worm':
@@ -3536,6 +3558,8 @@ def monster_death_no_loot(monster):
     monster.blocks = False
     monster.fighter = None
     monster.ai = DeadBody(monster)
+    if monsterr.name.split()[0] in ['worm','wolf','walrus']:
+        animals_killed += 1
 
     monster.name = 'dead ' + monster.name
     #add new object of the tipe "ammo"
@@ -3664,15 +3688,15 @@ def load_game():
     dialogs.loadFromFile()
 
 def new_game():
-    global player, inventory, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects, notifications, dungeon_name, kobolds_killed
+    global player, inventory, game_msgs, game_state, dungeon_level, isRealTime, game_animations, objects, notifications, dungeon_name, kobolds_killed,animals_killed
  
     #create object representing the player
     fighter_component = PlayerFighter(hp=5, defense=5, power=2, xp=0, death_function=player_death)
     player = Object(0, 0, '@', 'koboldicider', libtcod.white, blocks=True, fighter=fighter_component)
-    clothing = addItem('shirt',-1,-1,False)
-    
     player.level = 1
     isRealTime = False
+    clothing = addItem('hat',1,1,False)
+    clothing2 = addItem('shirt',-1,-1,False)
  
     #generate map (at this point it's not drawn to the screen)
     dungeon_level = 0
@@ -3682,9 +3706,11 @@ def new_game():
     make_world_map(6,True)
     initialize_fov()
     kobolds_killed = 0
+    animals_killed = 0
     game_state = 'playing'
     inventory = []
     inventory.append(clothing)
+    inventory.append(clothing2)
     game_animations = []
     notifications = []
 
@@ -3699,8 +3725,11 @@ def new_game():
 
     notifications.append(Notif('nham, tasty dog!',5,player.x+1,player.y+4))
     clothing.item.use()
+    clothing2.item.use()
 
-    message('As you return from you errands, you find your house burning and a kobold eating your dog')
+
+
+    #message('As you return from you errands, you find your house burning and a kobold eating your dog')
     message('the wise man in the forest will know what to do.')
     message('but first..')
  
@@ -3781,7 +3810,7 @@ def initialize_fov():
     libtcod.console_clear(con)  #unexplored areas start black (which is the default background color)
  
 def play_game():
-    global key, mouse,isRealTime,game_animations,notifications, camera_x, camera_y, dialogs,kobolds_killed
+    global key, mouse,isRealTime,game_animations,notifications, camera_x, camera_y, dialogs,kobolds_killed,animals_killed
 
     dot = Object(0,1,'.','dot', libtcod.white, blocks=False)
     objects.append(dot)
@@ -3895,7 +3924,7 @@ def main_menu():
     #libtcod.console_map_ascii_code_to_font('+', 3, 0)
     libtcod.console_map_ascii_code_to_font('T', 6, 0)
 
-    libtcod.image_blit_2x(img, 0, 0, 0)
+    #libtcod.image_blit_2x(img, 0, 0, 0)
     while not libtcod.console_is_window_closed():
         #show the background image, at twice the regular console resolution
  
@@ -3905,7 +3934,7 @@ def main_menu():
         #show options and wait for the player's choice
         #_continue = arrow_menu('continue ?',['   yes','    no'],12,0,12,12)
         #choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 25,10)
-        libtcod.console_set_default_foreground(0, libtcod.black)
+        libtcod.console_set_default_foreground(0, libtcod.light_grey)
         libtcod.console_print_ex(0, 4, 1, libtcod.BKGND_NONE, libtcod.LEFT, 'koboldicide')          
         libtcod.console_print_ex(0, 4, 2, libtcod.BKGND_NONE, libtcod.LEFT, '     v 0.02')          
         libtcod.console_set_default_foreground(0, libtcod.white)
