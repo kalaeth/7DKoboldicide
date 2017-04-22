@@ -847,7 +847,6 @@ class Shopowner:
                 if player.fighter.purse >= 20:
                     player.fighter.purse -= 20
                     addItem('work axe',shpowner.x+1,shpowner.y)
-                    #inventory.append(inv[0])
                     shpowner.fighter.talk(random.choice(['glad to be of service!','come back anytime!','there you go','the things i do for money...']))
                 else:
                     shpowner.fighter.talk(random.choice(['no can do.','bring money next time!']))
@@ -2103,6 +2102,43 @@ def place_objects(room):
             choice = random.choice(items)
             addItem(choice,x,y)
 
+def addWeapon(x=-1,y=-1,weap_to_add='random weapon',player=True):
+    if weap_to_add.split()[0] in ['random']:
+        _t1_ = random.choice(['wooden','short','metal','long','old','shinny','pick axe','work axe','war axe','mithril sword'])
+        if _t1_ not in ['pick axe','work axe','war axe','mithril sword']:
+            if weap_to_add.split()[1] in ['weapon']:
+                _t2_ = random.choice(['sword','axe','knife','spear'])
+            else:
+                _t2_ = weap_to_add.split()[1]
+        else:
+            _t2_ = _t1_.split()[1]
+            _t1_ = _t1_.split()[0]
+        _power_ = 1
+        if _t1_ in ['war','long','shinny']:
+            _power_ += 1
+        if _t2_ in ['axe']:
+            _char_ = 'P'
+            _color_ = libtcod.silver
+        elif _t2_ in ['sword']:
+            _char_ = '-'
+            _color_ = libtcod.silver
+        elif _t2_ in ['spear']:
+            _char_ = '|'
+            _color_ = libtcod.light_sepia
+        else:
+            _char_ = '-'
+            _color_ = libtcod.silver
+
+        equipment_component = Equipment(slot='right hand',power_bonus=_power_)
+        item = Object(x,y,_char_,'{} {}'.format(_t1_,_t2_),_color_, equipment=equipment_component)
+    if player:
+        objects.append(item)
+        item.send_to_back()  #items appear below other objects
+        item.always_visible = True  #items are visible even out-of-FOV, if in an explored areas
+    else:
+        return item
+
+
 def addItem(name,x=-1,y=-1,player=True):
     if name == 'wooden spear':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
@@ -2119,6 +2155,9 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'war axe':
         equipment_component = Equipment(slot='right hand', power_bonus=3)
         item = Object(x, y, 'P', 'war axe', libtcod.white, equipment=equipment_component)
+    elif name == 'pick axe':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, 'P', 'pick axe', libtcod.white, equipment=equipment_component)
     elif name == 'wooden boomerang':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
         item = Object(x, y, '(', 'wooden boomerang', libtcod.light_sepia, equipment=equipment_component)
@@ -3213,9 +3252,13 @@ def handle_keys():
                 curr_weap = get_equipped_in_slot('right hand')
                 weap_2 = get_equipped_in_slot('left hand')
                 if curr_weap is not None and curr_weap.owner.name in ['work axe'] or weap_2 is not None and weap_2.owner.name in ['work axe']:
-                    _x_,_y_ = player.fighter.xgetTargetTile()
+                    _x_,_y_ = player.fighter.getTargetTile()
                     if map[_x_][_y_].terrain == CHAR_FOREST and dungeon_level > 0:
                         map[_x_][_y_] = Tile(False,terrain=CHAR_GRASS)
+                if curr_weap is not None and curr_weap.owner.name in ['pick axe'] or weap_2 is not None and weap_2.owner.name in ['pick axe']:
+                    _x_,_y_ = player.fighter.getTargetTile()
+                    if map[_x_][_y_].terrain == CHAR_MOUNTAIN and dungeon_level > 0:
+                        map[_x_][_y_] = Tile(False,terrain=CHAR_DIRT)
 
                 if curr_weap is not None and curr_weap.owner.name.split(' ')[1] in ['bag','shirt','t-shirt']:
                     orien = player.fighter.orientation
@@ -3486,10 +3529,8 @@ def monster_death(monster):
     if monster.name.split(' ')[0] in ['kobold'] and monster.name.split(' ')[1] not in ['champion','trooper']:
         kobolds_killed+=1
         _drop_ = random.randint(0,30)
-        if _drop_ <= 3:
-            addItem('wooden spear',monster.x,monster.y)
-        elif _drop_ <=5:
-            addItem('short sword',monster.x,monster.y)
+        if _drop_ <=5:
+            addWeapon(monster.x,monster.y,'random weapon')
         elif _drop_ <= 7:
             addItem('leather armour',monster.x,monster.y)
         elif _drop_ <= 18:
@@ -3507,12 +3548,14 @@ def monster_death(monster):
     elif monster.name in ['kobold trooper']:
         addItem('leather armour',monster.x, monster.y)
         addItem('leather hat',monster.x, monster.y)
-        addItem('short sword',monster.x,monster.y)   
+        addWeapon(monster.x,monster.y,'random sword')
+        #addItem('short sword',monster.x,monster.y)   
     elif monster.name in ['anangu hunter']:
         if random.randint(1,3) == 3:
             addItem('wooden boomerang',monster.x, monster.y)
         else:
-            addItem('wooden spear',monster.x,monster.y)
+            addWeapon(monster.x,monster.y,'random spear')
+            #addItem('wooden spear',monster.x,monster.y)
     elif monster.name.split()[0] in ['shai-hulud']:
         if monster.name.split()[1] == 'head':
             Object(monster.x, monster.y, '%', 'dead freman', libtcod.red, blocks=False, ai=DeadBody(monster))
@@ -3981,7 +4024,7 @@ def main_menu():
 
  
 libtcod.console_set_custom_font('16x16_sm_ascii.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, '7DKoboldicide', False)
+libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'koboldicide', False)
 libtcod.sys_set_fps(LIMIT_FPS)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
