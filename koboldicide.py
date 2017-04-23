@@ -503,6 +503,7 @@ class PlayerFighter:
             return player.x - 1, player.y
 
     def attack(self, target):
+        #print 'attacking! (@pf]'
         #a simple formula for attack damage
         #roll power d10
         rolls = [random.randint(1,10)]
@@ -527,6 +528,11 @@ class PlayerFighter:
             #make the target take some damage
             message(self.owner.name + ' hits ' + target.name + ' with ' + str(damage) + ' dmg. ' + "{}".format(roll_history))
             target.fighter.take_damage(damage)
+            lhand = get_equipped_name_in_slot('left hand')
+            rhand = get_equipped_name_in_slot('right hand')
+            if rhand.split()[0] in ['soul','drain'] or lhand.split()[0] in ['soul','drain']:
+                message('some of {} soul passes through your weapon into you'.format(target.name))
+                player.fighter.heal(1)
         else:
             message(self.owner.name + ' misses ' + target.name+ ". " + "{}".format(roll_history))
   
@@ -1536,7 +1542,7 @@ def make_world_map(grassness=20,start=False):
     #print 'dragon @[{}]'.format(lair_name)
 
 def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
-    global map, objects, stairs, lair_name, dungeon_level
+    global map, objects, stairs, lair_name, dungeon_level, dungeon_name
  
     #the list of objects with just the player
     for ob in objects:
@@ -1545,6 +1551,8 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
             break
     objects = new_obj
     objects.append(player)
+
+    #print 'making [{}][{}] - inside the studios'.format(name,terrain)
  
     _stairs_ = True
     rooms = []
@@ -1576,6 +1584,17 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
             sage_type = 'old man'
         if nm == 'woods':
             margin = 25
+    elif terrain == CHAR_STONE or name == 'wizard tower':
+        name = 'wizard tower'
+        dungeon_name = name
+        nm = 'tower'
+        terrain = CHAR_STONE
+        margin = 10
+        r_max = 10
+        r_min = 9
+        min_rooms = 15
+        max_rooms_here = 40
+        _stairs_ = True
     elif terrain == CHAR_LAKE or nm in ['city','town','ville']:
         m_wid = 100
         m_hei = 100
@@ -1593,7 +1612,6 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
         min_rooms = 4
         max_rooms_here = 8
         _stairs_ = True
-
     elif terrain == CHAR_ICE:
         margin = 5
         r_max = 45
@@ -1607,12 +1625,14 @@ def make_map(terrain=CHAR_MOUNTAIN, name = 'no name'):
         r_min -= 3
         r_max -= 3
 
-    if name != lair_name and dungeon_level > 2:
+    if name != lair_name and name != 'wizard tower' and dungeon_level > 2:
         _stairs_ = False
         margin = 20
     if name == lair_name and dungeon_level > 2:
         _stairs_ = True
         margin = 15
+    if name in ['wizard tower']:
+        margin  = dungeon_level * 5
 
     #fill map with "blocked" tiles
     map = [[ Tile(True,terrain=terrain)
@@ -1993,7 +2013,7 @@ def place_homes(room, inabitants):
         map[x-1][y-2] = Tile(True,terrain=CHAR_STONE)
         map[x-3][y-2] = Tile(True,terrain=CHAR_STONE)
         map[x-3][y-3] = Tile(True,terrain=CHAR_STONE)
-        map[x-2][y-3] = Tile(True,terrain='.')
+        map[x-2][y-3] = Tile(True,terrain=CHAR_STAIRS)
         map[x-1][y-3] = Tile(True,terrain=']')
         map[x-1][y-4] = Tile(True,terrain=CHAR_STONE)
         map[x-2][y-4] = Tile(True,terrain=CHAR_STONE)
@@ -2104,8 +2124,8 @@ def place_objects(room):
 
 def addWeapon(x=-1,y=-1,weap_to_add='random weapon',player=True):
     if weap_to_add.split()[0] in ['random']:
-        _t1_ = random.choice(['wooden','short','metal','long','old','shinny','pick axe','work axe','war axe','mithril sword'])
-        if _t1_ not in ['pick axe','work axe','war axe','mithril sword']:
+        _t1_ = random.choice(['wooden','short','metal','long','old','shinny','pick axe','work axe','war axe','mithril sword','soul sucker'])
+        if _t1_ not in ['pick axe','work axe','war axe','mithril sword','soul sucker']:
             if weap_to_add.split()[1] in ['weapon']:
                 _t2_ = random.choice(['sword','axe','knife','spear'])
             else:
@@ -2114,7 +2134,7 @@ def addWeapon(x=-1,y=-1,weap_to_add='random weapon',player=True):
             _t2_ = _t1_.split()[1]
             _t1_ = _t1_.split()[0]
         _power_ = 1
-        if _t1_ in ['war','long','shinny']:
+        if _t1_ in ['war','long','shinny','soul']:
             _power_ += 1
         if _t2_ in ['axe']:
             _char_ = 'P'
@@ -3084,11 +3104,14 @@ def handle_keys():
                         #    next_level(dungeon_level,CHAR_MOUNTAIN,up=False)
                         elif map[player.x][player.y].terrain in ['>','<',CHAR_STAIRS]:
                             t = CHAR_MOUNTAIN
-                            for x in range(player.x-2,player.x+2):
-                                for y in range(player.y-2,player.y+2):
-                                    if map[x][y].terrain not in [CHAR_GRASS,CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_DIRT,'<','>']:
-                                        t = map[x][y].terrain
-                                        break     
+                            if map[_x][_y].terrain not in [CHAR_GRASS,CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_DIRT]:
+                                t = map[_x][_y].terrain
+                            else:
+                                for x in range(player.x-2,player.x+2):
+                                    for y in range(player.y-2,player.y+2):
+                                        if map[x][y].terrain not in [CHAR_GRASS,CHAR_LONG_GRASS,CHAR_TALL_GRASS,CHAR_DIRT,'<','>']:
+                                            t = map[x][y].terrain
+                                            break     
                             if map[player.x][player.y].terrain == '>':
                                 if dungeon_level > 0:
                                     nm = dungeon_name
@@ -3100,6 +3123,7 @@ def handle_keys():
                                     nm = dungeon_name
                                 else:
                                     nm = get_dungeon_name(player.x,player.y)
+                                #print 'makig [{}][{}]'.format(nm,t)
                                 next_level(dungeon_level,t,up=False,name=nm)
                                 key.vk == libtcod.KEY_KP5
                             break
@@ -3815,7 +3839,7 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
         elif dl < 3:
             save_floor('{}_{}F.dng'.format(name,dungeon_level))
             dungeon_level+=1
-            make_map(CHAR_MOUNTAIN,name=name)  #create a fresh new level!
+            make_map(terrain,name=name)  #create a fresh new level!
             initialize_fov()
         elif dl < 4:
             save_floor('{}_{}F.dng'.format(name,dungeon_level))
