@@ -531,8 +531,9 @@ class PlayerFighter:
             lhand = get_equipped_name_in_slot('left hand')
             rhand = get_equipped_name_in_slot('right hand')
             if rhand.split()[0] in ['soul','drain'] or lhand.split()[0] in ['soul','drain']:
-                message('some of {} soul passes through your weapon into you'.format(target.name))
-                player.fighter.heal(1)
+                if random.randint(0,10) == 7:
+                    message('some of {} soul passes through your weapon into you'.format(target.name))
+                    player.fighter.heal(1)
         else:
             message(self.owner.name + ' misses ' + target.name+ ". " + "{}".format(roll_history))
   
@@ -691,6 +692,63 @@ class BasicMonster:
                     notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
                     monster.move_towards(player.x, player.y)
                 #close enough, attack! (if the player is still alive.)
+                else:
+                    ai+=", X"
+                    notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
+                    monster.fighter.attack(player)
+        elif state in ['watchfull']:
+            if _dist <= 10:
+                notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                monster.move_towards(player.x, player.y)
+                monster.fighter.state = 'aggressive'
+        elif state in ['neutral']:
+            if _dist <= 1:
+                monster.fighter.talk('watch it..',color=libtcod.dark_yellow)
+                monster.fighter.state = 'aggressive'
+        elif state in ['friendly']:
+            #_dist = int(monster.distance_to(player))
+            if _dist <= 1:
+                monster.fighter.talk('hey friend!',color=libtcod.green)
+        else:
+            self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+        #print ai
+
+class WizardMonster:
+    #AI for a basic monster.
+    def take_turn(self):
+        #a basic monster takes its turn. if you can see it, it can see you
+        monster = self.owner
+        state = monster.fighter.state
+        _dist = int(monster.distance_to(player))
+        if state in ['aggressive']:
+            ai = "{}@[{},{}]?".format(monster.name, monster.x, monster.y)
+
+            #if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+            if _dist < 20:
+                ai+=", I see you!"
+                notifications.append(Notif('*',4,monster.x,monster.y-1))
+                
+                #move towards player if far away
+                ai+=", _dist[{}]".format(_dist)
+                if _dist > 15:
+                    ai+=", ?"
+                    notifications.append(Notif('?',4,monster.x,monster.y-1))
+                    self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+                elif _dist > 4:
+                    if random.randint(0,6) == 3:
+                        notifications.append(Notif('ALAKAZAM',4,monster.x,monster.y-1,libtcod.light_blue))    
+                        pwr = int (monster.fighter.power / 2)
+                        player.fighter.take_damage(pwr)
+                        notifications.append(Notif('*',3,player.x,player.y,libtcod.light_blue))
+                        message('the wizard\'s spell does {} damage!') 
+                    else:
+                        ai+=", !"
+                        notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                        monster.move_towards(player.x, player.y)
+                elif _dist > 1:
+                        ai+=", !"
+                        notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                        monster.move_towards(player.x, player.y)
                 else:
                     ai+=", X"
                     notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
@@ -2163,6 +2221,9 @@ def addItem(name,x=-1,y=-1,player=True):
     if name == 'wooden spear':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
         item = Object(x, y, '|', 'wooden spear', libtcod.dark_sepia, equipment=equipment_component)
+    elif name == 'long staff':
+        equipment_component = Equipment(slot='right hand', power_bonus=1)
+        item = Object(x, y, '|', 'wooden spear', libtcod.dark_sepia, equipment=equipment_component)
     elif name == 'wooden stick':
         equipment_component = Equipment(slot='right hand', power_bonus=1)
         item = Object(x, y, '/', 'wooden stick', libtcod.light_sepia, equipment=equipment_component)
@@ -2215,6 +2276,9 @@ def addItem(name,x=-1,y=-1,player=True):
     elif name == 'still suit':
         equipment_component = Equipment(slot='body', defense_bonus=2, power_bonus=1)
         item = Object(x, y, 's', 'still suit', libtcod.sepia, equipment=equipment_component)
+    elif name == 'still suit':
+        equipment_component = Equipment(slot='body', defense_bonus=2, power_bonus=0)
+        item = Object(x, y, 's', 'still suit', libtcod.sepia, equipment=equipment_component)
     elif name == 'metal armour':
         equipment_component = Equipment(slot='body', defense_bonus=3)
         item = Object(x, y, 'a', 'metal armour', libtcod.silver, equipment=equipment_component)
@@ -2240,6 +2304,9 @@ def addItem(name,x=-1,y=-1,player=True):
             else:
                 equipment_component = Equipment(slot='head',defense_bonus=1)
             item = Object(x, y, '^', '{}hat'.format(nm), libtcod.white, equipment=equipment_component)
+    elif name == 'wizard hat':
+        equipment_component = Equipment(slot='head',defense_bonus=2)
+        item = Object(x, y, '^', 'wizard hat', libtcod.white, equipment=equipment_component)
     elif name == 'elm':
         equipment_component = Equipment(slot='head',defense_bonus=2)
         item = Object(x, y, '^', 'metal elm', libtcod.white, equipment=equipment_component)
@@ -2271,6 +2338,8 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         elif name.split()[0] in ['worm','wolf','wallrus']:
             state = 'neutral'
             name = '{} animal'.format(name)
+        else:
+            state = 'neutral'
     personal_name = generateName()
     if x == -1:
         x = random.randint(0, MAP_WIDTH-1)
@@ -2280,6 +2349,10 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         fighter_component = Fighter(hp=7, defense=20, power=0, xp=0, death_function=monster_death, state='friendly')
         ai_component = Shopowner()
         monster = Object(x, y, '@', 'princess shmi', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name == 'wizard':
+        fighter_component = Fighter(hp=12, defense=12, power=4, xp=0, death_function=monster_death, state='aggressive')
+        ai_component = WizardMonster()
+        monster = Object(x, y, 'W', 'evil wizard', libtcod.darker_red, blocks=True, fighter=fighter_component, ai=ai_component)
     elif name == 'farmer':
         fighter_component = Fighter(hp=6, defense=8, power=1, xp=0, death_function=monster_death, state='friendly')
         ai_component = Shopowner()
@@ -3145,7 +3218,7 @@ def handle_keys():
             if key_char in ['q','Q'] or key.vk == libtcod.KEY_KP1:
                 curr_weap = get_equipped_in_slot('right hand')
                 weap_2 = get_equipped_in_slot('left hand')
-                throwable = ['spear','bow','boomerang','stick','rock']
+                throwable = ['spear','bow','boomerang','stick','rock','knife']
                 if curr_weap is None or curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in throwable:
                     if weap_2 is not None and weap_2.owner.name.split(' ')[1] in throwable:
                         curr_weap = weap_2
@@ -3250,7 +3323,7 @@ def handle_keys():
                                 notifications.append(Notif('(',3,_x,player.y))
                     if not fit is None:
                         notifications.append(Notif('*',5,_x,_y))
-                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','rock']:
+                        if curr_weap.owner.name.split(' ')[1] in ['spear','stick','rock','knife']:
                             message('you threw your {} at {}'.format(curr_weap.owner.name,f.name))
                             i_name = curr_weap.owner.name
                             for it in inventory:
@@ -3308,8 +3381,8 @@ def handle_keys():
                     elif orien == SOUTH:
                         if player_move_or_attack(0, 1,False,True):
                             message('you strangle {} with your {}'.format(f.name,curr_weap.owner.name,dmg))
-                swingable = ['sword','axe','stick']
-                pokable = ['spear','whip']
+                swingable = ['sword','axe','stick','staff']
+                pokable = ['spear','whip','sucker','knife']
                 if curr_weap is None and weap_2 is not None or (curr_weap is not None and curr_weap.owner.name.split(' ')[1] not in swingable and weap_2 is not None): 
                     if weap_2.owner.name.split(' ')[1] in swingable:
                         curr_weap = weap_2
@@ -3565,6 +3638,10 @@ def monster_death(monster):
             addItem('shirt',monster.x,monster.y)
     elif monster.name.split()[0] in ['farmer','lumberjack','leathersmith','blacksmith','nurse']:
         addItem('shirt',monster.x, monster.y)
+    elif monster.name in ['evil wizard']:
+        addItem('wizard robes',monster.x, monster.y)
+        addItem('wizard hat',monster.x, monster.y)
+        addItem('long staff',monster.x,monster.y)
     elif monster.name in ['kobold champion']:
         addItem('metal armour',monster.x, monster.y)
         addItem('elm',monster.x, monster.y)
@@ -3846,13 +3923,19 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
             make_map('|',name)
             dungeon_level+=1
             initialize_fov()
-        elif dl < 5:
+        elif dl < 5 and dungeon_name != 'wizard tower':
             save_floor('{}_{}F.dng'.format(name,dungeon_level))
             dungeon_level+=1
             lair = True
             make_customgenericmap('#')
             add_dragon()
             initialize_fov()
+        elif dl < 5 and dungeon_name == 'wizard tower':
+            save_floor('{}_{}F.dng'.format(name,dungeon_level))
+            make_map('=',name)
+            dungeon_level+=1
+            initialize_fov()
+            addMonster('wizard',player.x, player.y - 3)
         else:
             load_floor('world.dng')
             initialize_fov()
