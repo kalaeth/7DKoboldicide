@@ -103,6 +103,15 @@ class Dungeon:
         self.x = x
         self.y = y
 
+def get_town_name():
+    global dung_list
+
+    for d in dung_list:
+        if d.name.split()[1] in ['city','town','ville']:
+            return d.name
+    return 'no where'
+
+
 def get_dungeon_name(x,y):
     global dung_list
 
@@ -1192,9 +1201,15 @@ class Item:
                         opt_list.append('bag it at {}'.format(i))
 
                     
+            opt_list.append('discard into void')
             opt = arrow_menu('- {} -'.format(self.owner.name),opt_list,50)
-            #print 'opt : {}'.format(opt)
-            if opt == 0:
+            print 'opt = [{}], size = [{}]'.format(opt,len(opt_list))
+            st = ''
+            for option in opt_list:
+                st += '[{}]'.format(option[:3])
+
+            print 'opt : {}'.format(st)
+            if opt <= 0:
                 #print 'DROP TH BEAT!'
                 pick_up = False
                 switch = 'drop'
@@ -1212,10 +1227,16 @@ class Item:
                 pick_up = True
                 if c_equip_l is not None:
                    switch = 'left'
-            else:
+            elif opt_list[opt][:3] == 'bag':
                 pick_up = True
                 switch = 'bag {}'.format(opt_list[opt].split(' ')[3])
                 #print 'bag me @[{}] and call me a pretzel'.format(switch)
+            elif opt_list[opt] == 'discard into void':
+                pick_up = False
+                switch = 'discard'               
+            else:
+                pick_up = False
+                switch = 'drop'
 
         if pick_up:
             #add to the player's inventory and remove from the map
@@ -1237,7 +1258,12 @@ class Item:
                 c_equip.owner.item.drop(_discard=True)
                 self.use()
         else:
-            message('you drop a {} on the floor'.format(self.owner.name))
+            if switch == 'discard':
+                objects.remove(self.owner)
+                message('you drop a {} into the void'.format(self.owner.name))
+            else:
+                message('you drop a {} on the floor'.format(self.owner.name))
+
 
 
  
@@ -1315,7 +1341,7 @@ class Equipment:
  
         #equip object and show a message about it
         self.is_equipped = True
-        message('Equipped ' + self.owner.name + ' on ' + self.slot + '.', libtcod.light_green)
+        message('equipped ' + self.owner.name + ' on ' + self.slot + '.', libtcod.light_green)
  
     def dequip(self):
         #dequip object and show a message about it
@@ -3611,13 +3637,10 @@ def player_death(player):
 def dragon_death(monster):
     message('oh, wow, you won')
     message('the dragon lies dead at your feet!')
-
     render_all()
-    msgbox("congratulations!")
-    msgbox("you won!!",1)
     msgbox("you have become kobolicider, destroyer of kobolds.",2)
     msgbox(' you killed [{}] kobolds!'.format(kobolds_killed),3)
-
+    game_state = 'dead'    
     return 'exit'
 
 
@@ -3642,6 +3665,7 @@ def monster_death(monster):
         addItem('wizard robes',monster.x, monster.y)
         addItem('wizard hat',monster.x, monster.y)
         addItem('long staff',monster.x,monster.y)
+        monster.name = 'wizard wizard'
     elif monster.name in ['kobold champion']:
         addItem('metal armour',monster.x, monster.y)
         addItem('elm',monster.x, monster.y)
@@ -3941,7 +3965,6 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
             initialize_fov()
             dungeon_level = 0
             message('oh, wow, you won')
-
     else:
         #print "going up! dl[{}]".format(dungeon_level)
 
@@ -3956,6 +3979,9 @@ def next_level(dl,terrain=CHAR_MOUNTAIN,up=False, name='world -----'):
                 addMonster('kobold trooper',0,1)
         else:
             dungeon_level -= 1
+            if dungeon_level == 1 and name in ['wizard tower']:
+                name = get_town_name()
+                dungeon_name = name
             load_floor('{}_{}F.dng'.format(name,dungeon_level))
             initialize_fov()
     save_game()
