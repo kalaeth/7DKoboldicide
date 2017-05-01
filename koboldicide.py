@@ -11,6 +11,7 @@ import textwrap
 import shelve
 import random
 import os
+import sys
 import shutil
 from time import sleep
 
@@ -4116,12 +4117,6 @@ def main_menu():
     libtcod.console_clear(0)
 
     img = libtcod.image_load('menu_background.png')
-    libtcod.console_map_ascii_code_to_font('@', 2, 0)
-    libtcod.console_map_ascii_code_to_font('O', 1, 0)
-    #libtcod.console_map_ascii_code_to_font('+', 3, 0)
-    libtcod.console_map_ascii_code_to_font('T', 6, 0)
-
-    #libtcod.image_blit_2x(img, 0, 0, 0)
     while not libtcod.console_is_window_closed():
         #show the background image, at twice the regular console resolution
  
@@ -4156,19 +4151,53 @@ def main_menu():
             return 
 
  
-libtcod.console_set_custom_font('16x16_sm_ascii.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)
+try:
+    os.mkdir('levels')
+except:
+    shutil.rmtree('levels')
+    os.mkdir('levels')
+
+
+print 'Number of arguments:', len(sys.argv), 'arguments.'
+print 'Argument List:', str(sys.argv)
+arg = 'none'
+if len(sys.argv) > 1 and sys.argv[1] in ['small','-s','--s','/s']:
+    libtcod.console_set_custom_font('terminal.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INCOL)    
+    arg = 'small'
+elif len(sys.argv) > 1 and sys.argv[1] in ['medium','-m','--m','/m']:
+    libtcod.console_set_custom_font('Yayo_tunur_13x13.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)    
+    arg = 'med'
+elif len(sys.argv) > 1 and sys.argv[1] in ['huge','-h','--h','/h']:
+    libtcod.console_set_custom_font('Bisasam_24x24.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)    
+    arg = 'huge'
+else:
+    libtcod.console_set_custom_font('16x16_sm_ascii.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_ASCII_INROW)
+
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'koboldicide', False)
 libtcod.sys_set_fps(LIMIT_FPS)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 panel_v = libtcod.console_new(SCREEN_WIDTH - CAMERA_WIDTH, SCREEN_HEIGHT - PANEL_HEIGHT)
 
+if arg in ['huge']:
+    libtcod.console_map_ascii_code_to_font('.', 8, 15)
+    libtcod.console_map_ascii_code_to_font('P', 11, 15)
+    libtcod.console_map_ascii_code_to_font('T', 6, 0)
+    libtcod.console_map_ascii_code_to_font('@', 2, 0)
+    libtcod.console_map_ascii_code_to_font('O', 1, 0)
+    libtcod.console_map_ascii_code_to_font('%', 13, 15)
+    libtcod.console_map_ascii_code_to_font('#', 0, 11)
+elif arg in ['med']:
+    libtcod.console_map_ascii_code_to_font('.', 8, 15)
+    libtcod.console_map_ascii_code_to_font('T', 6, 0)
+    libtcod.console_map_ascii_code_to_font('O', 1, 0)
+    libtcod.console_map_ascii_code_to_font('#', 0, 11)
 
- 
-try:
-    os.mkdir('levels')
-except:
-    shutil.rmtree('levels')
-    os.mkdir('levels')
+if arg not in ['small','med','huge']:
+    libtcod.console_map_ascii_code_to_font('@', 2, 0)
+    libtcod.console_map_ascii_code_to_font('O', 1, 0)
+    libtcod.console_map_ascii_code_to_font('T', 6, 0)
+
+
 main_menu()
 shutil.rmtree('levels')
