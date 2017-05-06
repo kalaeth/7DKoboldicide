@@ -780,6 +780,187 @@ class WizardMonster:
             self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
         #print ai
 
+class RangedMonster:
+    #AI for a basic monster.
+######################################################################################################################################3
+    #must have indicator on fighter to say if it has already shoot his weapon
+######################################################################################################################################3
+    def take_turn(self):
+        #a basic monster takes its turn. if you can see it, it can see you
+        monster = self.owner
+        state = monster.fighter.state
+        _dist = int(monster.distance_to(player))
+        if state in ['aggressive']:
+            ai = "{}@[{},{}]?".format(monster.name, monster.x, monster.y)
+
+            #if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+            if _dist < 20:
+                ai+=", I see you!"
+                notifications.append(Notif('*',4,monster.x,monster.y-1))
+                
+                #move towards player if far away
+                ai+=", _dist[{}]".format(_dist)
+                if _dist > 15:
+                    ai+=", ?"
+                    notifications.append(Notif('?',4,monster.x,monster.y-1))
+                    self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+                elif _dist > 6:
+                    if player.x == monster.x or player.y == monster.y:
+                        ai=", shoot!"
+                        if monster.name in ['anangu champion']:
+                            _boomerang = True
+                        else:
+                            _boomerang = False
+                        if monster.name not in ['anangu champion']:
+                            self.owner.ai = BasicMonster()
+                        shoot_at(monster.x,monster.y,player.x,player.y, _boomerang, monster.name)
+                elif _dist > 1:
+                        ai+=", !"
+                        notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                        monster.move_towards(player.x, player.y)
+                else:
+                    ai+=", X"
+                    notifications.append(Notif('x',4,monster.x,monster.y-1,libtcod.light_red))
+                    monster.fighter.attack(player)
+        elif state in ['watchfull']:
+            if _dist <= 10:
+                notifications.append(Notif('!',4,monster.x,monster.y-1,libtcod.red))
+                monster.move_towards(player.x, player.y)
+                monster.fighter.state = 'aggressive'
+        elif state in ['neutral']:
+            if _dist <= 1:
+                monster.fighter.talk('watch it..',color=libtcod.dark_yellow)
+                monster.fighter.state = 'aggressive'
+        elif state in ['friendly']:
+            #_dist = int(monster.distance_to(player))
+            if _dist <= 1:
+                monster.fighter.talk('hey friend!',color=libtcod.green)
+        else:
+            self.owner.move(libtcod.random_get_int(0, -1, 1), libtcod.random_get_int(0, -1, 1))
+        #print ai
+
+def shoot_at(init_x,init_y,end_x,end_y,_boomerang_=False,name='you',weap='wooden spear'):
+    global objects
+    if _boomerang_:
+        weap = 'wooden boomerang'
+    fs = []
+    for o in objects:
+        if (o.x == init_x or o.y == init_y) and o.fighter:
+             fs.append(o)
+    #fire in the hole!
+    _x = init_x
+    _y = init_y
+    _break = False
+    dmg = random.randint(0,3)
+    fit =  None
+    endx = 0
+    endy = 0 
+
+    if init_y == end_y:
+        #same Y. either WEST or EAST
+        if end_x < init_x:
+            orient = WEST
+        else:
+            orient = EAST
+    else: #same X, NORTH or SOUTH
+        if end_y < init_y:
+            orient = NORTH
+        else:
+            orient = SOUTH
+
+    print 'shooting from [{},{}] to [{},{}], orint is [{}]'.format(init_x,init_y,end_x,end_y, orient)
+
+    if orient == NORTH:
+        for _y in range(init_y-1,0, -1):
+            if map[init_x][_y].blocked or _break:
+                endx = _x
+                endy = _y+1
+                break
+            for f in fs:
+                if f.x == _x and f.y == _y:
+                    fit = f
+                    endx = _x
+                    endy = _y+1
+                    _break = True
+                    break
+            if _boomerang_:
+                notifications.append(Notif('(',2,init_x,_y))
+            else:
+                notifications.append(Notif('|',3,init_x,_y))
+        if _boomerang_:
+            for _y in range(endy,init_y):
+                notifications.append(Notif(')',3,_x,init_y))
+    elif orient == EAST:
+        for _x in range(init_x+1, MAP_WIDTH):
+            if map[_x][init_y].blocked or _break:
+                endx = _x-1
+                endy = _y
+                break
+            for f in fs:
+                if f.x == _x and f.y == _y:
+                    fit = f
+                    endx = _x-1
+                    endy = _y
+                    _break = True
+                    break
+            if _boomerang_:
+                notifications.append(Notif('(',2,_x,init_y))
+            else:
+                notifications.append(Notif('-',3,_x,init_y))
+        if _boomerang_:
+            for _x in range(endx,init_x,-1):
+                notifications.append(Notif(')',3,_x,init_y))
+    elif orient == SOUTH:
+        for _y in range(init_y+1, MAP_HEIGHT):
+            if map[init_x][_y].blocked or _break:
+                endx = _x
+                endy = _y-1
+                break
+            for f in fs:
+                if f.x == _x and f.y == _y:
+                    fit = f
+                    endx = _x
+                    endy = _y-1
+                    _break = True
+                    break
+            if _boomerang_:
+                notifications.append(Notif(')',2,init_x,_y))
+            else:
+                notifications.append(Notif('|',3,init_x,_y))
+        if _boomerang_:
+            for _y in range(endy,init_y,-1):
+                notifications.append(Notif('(',3,_x,init_y))
+    elif orient == WEST:
+        for _x in range(init_x-1,0,-1):
+            if map[_x][init_y].blocked or _break:
+                endx = _x+1
+                endy = _y
+                break
+            for f in fs:
+                if f.x == _x and f.y == _y:
+                    fit = f
+                    endx = _x+1
+                    endy = _y
+                    _break = True
+                    break
+            if _boomerang_:
+                notifications.append(Notif(')',2,_x,init_y))
+            else:
+                notifications.append(Notif('-',3,_x,init_y))
+        if _boomerang_:
+            for _x in range(init_x,endx-1):
+                notifications.append(Notif('(',3,_x,init_y))
+    #afther throw!
+    if not fit is None:
+        notifications.append(Notif('*',5,_x,_y))
+        if weap.split(' ')[1] in ['spear','stick','rock','knife']:
+            message('{} threw a {} at {}'.format(name,weap,f.name))
+        else:
+            message('{} shot a {} at {}'.format(name,weap,f.name))
+        fit.fighter.take_damage(dmg)
+
+
+
 class HunterMonster:
     #AI for a basic monster.
     def take_turn(self):
@@ -2175,6 +2356,8 @@ def place_objects(room):
             monster_chances['desert worm'] = 95
         else:
             monster_chances['anangu hunter'] = 95
+            if dungeon_level > 2:
+                monster_chances['anangu champion'] = 5
     if dungeon_name not in lair_name and dungeon_level > 1:
         monster_chances['kobold champion'] = 5
     if dungeon_level > 0:
@@ -2429,9 +2612,13 @@ def addMonster(name,x=-1,y=-1,state='none',returnM=False):
         fighter_component = Fighter(hp=2, defense=2, power=2, xp=3, death_function=monster_death_no_loot,state='wandering')
         ai_component = BasicMonster()
         monster = Object(x, y, '~', 'desert worm', libtcod.pink,blocks=True, fighter=fighter_component, ai=ai_component)
+    elif name == 'anangu champion':
+        fighter_component = Fighter(hp=6, defense=3, power=8, xp=35, death_function=monster_death,state='wandering')
+        ai_component = RangedMonster()
+        monster = Object(x, y, '@', 'anangu champion', libtcod.white,blocks=True, fighter=fighter_component, ai=ai_component)
     elif name == 'anangu hunter':
         fighter_component = Fighter(hp=5, defense=1, power=6, xp=35, death_function=monster_death,state='wandering')
-        ai_component = HunterMonster()
+        ai_component = RangedMonster()
         monster = Object(x, y, '@', 'anangu hunter', libtcod.white,blocks=True, fighter=fighter_component, ai=ai_component)
     else:
         fighter_component = Fighter(hp=1, defense=0, power=1, xp=3, death_function=monster_death_no_loot,state='wandering')
@@ -3676,12 +3863,10 @@ def monster_death(monster):
         addItem('leather hat',monster.x, monster.y)
         addWeapon(monster.x,monster.y,'random sword')
         #addItem('short sword',monster.x,monster.y)   
+    elif monster.name in ['anangu champion']:
+        addItem('wooden boomerang',monster.x, monster.y)
     elif monster.name in ['anangu hunter']:
-        if random.randint(1,3) == 3:
-            addItem('wooden boomerang',monster.x, monster.y)
-        else:
-            addWeapon(monster.x,monster.y,'random spear')
-            #addItem('wooden spear',monster.x,monster.y)
+        addWeapon(monster.x,monster.y,'random spear')
     elif monster.name.split()[0] in ['shai-hulud']:
         if monster.name.split()[1] == 'head':
             Object(monster.x, monster.y, '%', 'dead freman', libtcod.red, blocks=False, ai=DeadBody(monster))
